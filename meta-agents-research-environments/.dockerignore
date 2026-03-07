@@ -1,0 +1,12 @@
+# Exclude ARE
+./are/simulation/tests
+./are/simulation/tutorials
+
+# Exclude technical files and folders
+**/__pycache__
+**/node_modules
+**/build
+**/*.md
+!README.md
+!LICENSE
+**/*.log

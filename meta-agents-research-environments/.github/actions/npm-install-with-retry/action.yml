@@ -1,0 +1,49 @@
+name: 'NPM Install with Retry'
+description: 'Install npm dependencies with retry logic and exponential backoff'
+inputs:
+  working-directory:
+    description: 'Working directory to run npm ci in'
+    required: false
+    default: '.'
+  max-attempts:
+    description: 'Maximum number of retry attempts'
+    required: false
+    default: '3'
+  base-wait-seconds:
+    description: 'Base wait time in seconds between retries'
+    required: false
+    default: '30'
+  timeout-minutes:
+    description: 'Timeout in minutes for each npm ci attempt'
+    required: false
+    default: '10'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install npm dependencies with retry
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        retry_count=0
+        max_attempts=${{ inputs.max-attempts }}
+        base_wait=${{ inputs.base-wait-seconds }}
+        timeout_seconds=$((${{ inputs.timeout-minutes }} * 60))
+
+        while [ $retry_count -lt $max_attempts ]; do
+          echo "Attempt $((retry_count + 1)) of $max_attempts: Running npm ci"
+
+          if timeout $timeout_seconds npm ci; then
+            echo "npm ci succeeded on attempt $((retry_count + 1))"
+            exit 0
+          else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_attempts ]; then
+              wait_time=$((base_wait * retry_count))
+              echo "npm ci failed on attempt $retry_count. Waiting $wait_time seconds before retry..."
+              sleep $wait_time
+            else
+              echo "npm ci failed after $max_attempts attempts"
+              exit 1
+            fi
+          fi
+        done

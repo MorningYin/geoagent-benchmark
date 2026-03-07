@@ -1,0 +1,14 @@
+{
+    "include": [
+        "are/simulation"
+    ],
+    "exclude": [
+        "are/simulation/agents/default_agent/base_agent.py",
+        "are/simulation/agents/default_agent/steps/planning.py",
+        "are/simulation/agents/default_agent/tools/action_executor.py",
+        "are/simulation/agents/default_agent/utils/logging_utils.py",
+        "are/simulation/agents/default_agent/utils/python_interpreter.py",
+        "are/simulation/agents/llm/openai/openai_engine.py",
+        "are/simulation/datasets"
+    ]
+}

@@ -1,0 +1,14 @@
+name: 'Setup Python and uv'
+description: 'Sets up Python 3.12 and uv with caching'
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - id: setup-uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        python-version: "3.12"
+        enable-cache: true

@@ -1,0 +1,147 @@
+name: Check Python Code
+run-name: On Push PY checks - ${{ github.ref_name }} by ${{ github.actor }}
+on:
+  push:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: 'Working directory to run tests in'
+        required: false
+        type: string
+        default: '.'
+      use-artifact:
+        description: 'Name of artifact to download and use as working directory'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      HF_TOKEN:
+        description: 'HuggingFace token for accessing private models'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: ${{ inputs.use-artifact != '' && format('{0}/oss-content', inputs.working-directory) || inputs.working-directory }}
+
+jobs:
+  lock-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - uses: ./.github/actions/setup-python-uv
+      - name: Check uv lock file
+        working-directory: ${{ env.WORKING_DIR }}
+        run: uv lock --locked
+
+  python-linting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - uses: ./.github/actions/setup-python-uv
+      - name: Run Python linting
+        working-directory: ${{ env.WORKING_DIR }}
+        run: uvx -p3.12 --with flake8-tidy-imports --with flake8 ruff check .
+
+  python-formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - uses: ./.github/actions/setup-python-uv
+      - name: Run Python formatting checks
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          uvx -p3.12 --with flake8-tidy-imports --with flake8 ruff check --select I .
+          uvx -p3.12 ruff format --check .
+
+  python-typing:
+    runs-on: ubuntu-latest
+    needs: [lock-file]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - uses: ./.github/actions/setup-python-uv
+      - name: Run Python typing checks
+        working-directory: ${{ env.WORKING_DIR }}
+        run: uv run --extra dev --extra gui pyright
+
+  python-tests:
+    runs-on: ubuntu-latest
+    needs: [lock-file]
+    env:
+      # Set the HF_DATASETS_CACHE environment variable to a directory in the workspace
+      HF_DATASETS_CACHE: ${{ github.workspace }}/.hf_datasets_cache
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - uses: ./.github/actions/setup-python-uv
+      # lfs: true doesn't cache, so it takes over 2 minutes to fetch everything every time, let's cache it: https://github.com/actions/checkout/issues/165
+      - name: Create Git LFS file list
+        if: inputs.use-artifact == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: git lfs ls-files -l |cut -d' ' -f1 |sort >.git/lfs-hashes.txt
+      - name: Restore Git LFS object cache
+        if: inputs.use-artifact == ''
+        uses: actions/cache@v4
+        with:
+          path: ${{ inputs.working-directory }}/.git/lfs
+          key: ${{ runner.os }}-lfsdata-v1-${{ hashFiles(format('{0}/.git/lfs-hashes.txt', inputs.working-directory)) }}
+          restore-keys: |
+            ${{ runner.os }}-lfsdata-v1-
+            ${{ runner.os }}-lfsdata
+      - name: Fetch any needed Git LFS objects and prune extraneous ones
+        if: inputs.use-artifact == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: git lfs fetch --prune
+      - name: Check out Git LFS content
+        if: inputs.use-artifact == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: git lfs checkout
+      # Cache Huggingface datasets to speed up test_gaia2_mini_scenarios_hf
+      - name: Cache Huggingface datasets
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HF_DATASETS_CACHE }}
+          key: ${{ runner.os }}-hf-datasets-${{ hashFiles('uv.lock', 'pyproject.toml') }}
+      # Create the HF datasets cache directory if it doesn't exist
+      - name: Create Huggingface datasets cache directory
+        run: mkdir -p ${{ env.HF_DATASETS_CACHE }}
+      # ok, now we can run the tests
+      - name: Run Python tests
+        working-directory: ${{ env.WORKING_DIR }}
+        run: uv run --extra dev --extra gui pytest -v --full-trace --pyargs are.simulation

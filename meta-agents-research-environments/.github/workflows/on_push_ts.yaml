@@ -1,0 +1,194 @@
+name: Check Typescript Code
+run-name: On Push TS check - ${{ github.ref_name }} by ${{ github.actor }}
+on:
+  push:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: 'Working directory to run tests in'
+        required: false
+        type: string
+        default: '.'
+      use-artifact:
+        description: 'Name of artifact to download and use as working directory'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: ${{ inputs.use-artifact != '' && format('{0}/oss-content', inputs.working-directory || '.') || (inputs.working-directory || '.') }}
+
+jobs:
+  check-typescript-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - name: Check if TypeScript project exists
+        id: check-ts
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if [ -d "are/simulation/gui/client" ] && [ -f "are/simulation/gui/client/package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "TypeScript project found at are/simulation/gui/client"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No TypeScript project found at are/simulation/gui/client"
+          fi
+    outputs:
+      typescript-exists: ${{ steps.check-ts.outputs.exists }}
+
+  typescript-type-checks:
+    runs-on: ubuntu-latest
+    needs: check-typescript-project
+    if: needs.check-typescript-project.outputs.typescript-exists == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.10.0'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install-with-retry
+        with:
+          working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+      - name: Run TypeScript checks
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: npm run tsc
+
+  vitest-tests:
+    runs-on: ubuntu-latest
+    needs: check-typescript-project
+    if: needs.check-typescript-project.outputs.typescript-exists == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download artifact
+        if: inputs.use-artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.use-artifact }}
+          path: ${{ inputs.working-directory }}/oss-content
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.10.0'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install-with-retry
+        with:
+          working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+      - name: Run vitest tests
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: npm run test
+
+  graphql-no-uncommitted-changes:
+    runs-on: ubuntu-latest
+    needs: check-typescript-project
+    if: needs.check-typescript-project.outputs.typescript-exists == 'true' && inputs.use-artifact == ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install Python dependencies
+        working-directory: ${{ inputs.working-directory }}
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.10.0'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install-with-retry
+        with:
+          working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+      - name: Run GraphQL schema check
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: |
+          npm run graphql
+          if git status --porcelain schema.graphql | grep -q .; then
+            git --no-pager diff schema.graphql
+            echo "Uncommitted schema changes detected in schema.graphql, please re-run 'npm run graphql' and commit all generated changes."
+            exit 1
+          else
+            echo "No uncommitted changes detected in schema.graphql. All good."
+          fi
+
+  relay-no-uncommitted-changes:
+    runs-on: ubuntu-latest
+    needs: check-typescript-project
+    if: needs.check-typescript-project.outputs.typescript-exists == 'true' && inputs.use-artifact == ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.10.0'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install-with-retry
+        with:
+          working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+      - name: Clean up existing .graphql.ts files
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: find . -name "*.graphql.ts" -delete
+      - name: Run Relay check
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: |
+          npm run relay
+          if git status --porcelain | grep -E '\.graphql\.ts$' | grep -q .; then
+            git --no-pager diff
+            echo "Uncommitted changes detected in .graphql.ts files, please re-run 'npm run relay' and commit all generated changes."
+            exit 1
+          else
+            echo "No uncommitted changes detected in .graphql.ts files. All good."
+          fi
+
+  prettier-format-check:
+    runs-on: ubuntu-latest
+    needs: check-typescript-project
+    if: needs.check-typescript-project.outputs.typescript-exists == 'true' && inputs.use-artifact == ''
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23.10.0'
+      - name: Install npm dependencies
+        uses: ./.github/actions/npm-install-with-retry
+        with:
+          working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+      - name: Run format check
+        working-directory: ${{ env.WORKING_DIR }}/are/simulation/gui/client
+        run: |
+          npm run format
+          if git status --porcelain | grep -q .; then
+            echo "Files changed by formatting:"
+            git status --porcelain
+            echo ""
+            echo "Diff of changes:"
+            git --no-pager diff
+            echo "Formatting issues detected. Please run 'npm run format' locally and commit the changes."
+            exit 1
+          else
+            echo "No formatting issues detected. All files are properly formatted."
+          fi

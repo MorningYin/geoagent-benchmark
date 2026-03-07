@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling", "hatch-build-scripts", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meta-agents-research-environments"
+version = "1.2.0"
+description = "Meta Agents Research Environments is a research-driven environment designed to simulate complex, real-life tasks that span several minutes and require multiple steps to be solved. Unlike static simulation environments, this platform introduces a dynamic setting where the state of the environment evolves and new information is continuously integrated."
+readme = "README.md"
+license = {text = "MIT License"}
+requires-python = ">=3.10"
+dynamic = ["dependencies", "optional-dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/facebookresearch/meta-agents-research-environments/"
+Repository = "https://github.com/facebookresearch/meta-agents-research-environments.git"
+
+[project.scripts]
+are-benchmark = "are.simulation.benchmark:main"
+are-run = "are.simulation.main:main"
+are-gui = "are.simulation.gui.cli:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[tool.hatch.metadata.hooks.requirements_txt.optional-dependencies]
+dev = ["requirements-dev.txt"]
+gui = ["requirements-gui.txt"]
+
+
+[tool.hatch.build.targets.wheel]
+only-include = ["are"]
+sources = {"are" = "are"}
+exclude = [
+    "are/simulation/gui/client/node_modules/**",
+    "are/simulation/gui/client/src/**",
+    "are/simulation/gui/client/.vite/**",
+    "are/simulation/gui/client/*.json",
+    "are/simulation/gui/client/*.js",
+    "are/simulation/gui/client/*.ts",
+    "are/simulation/gui/client/index.html",
+    "are/simulation/datasets/**",
+]
+
+[[tool.hatch.build.hooks.build-scripts.scripts]]
+work_dir = "."
+# Build the frontend during package build only when BUILD_GUI is set
+commands = [
+    "python build_hooks/build_gui.py",
+]
+
+[tool.ruff]
+
+# Assume Python 3.12+
+target-version = "py312"
+
+[tool.ruff.lint]
+# Default lint rules + import sort + ban some imports.
+# TODO: Add "B" rules once simple workflow is working.
+select = ["E4", "E7", "E9", "F", "I", "TID25"]
+ignore = ["E402", "E501"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# Disallow use of selected modules/classes.
+"typing.Dict".msg = "Use builtin `dict` instead."
+"typing.List".msg = "Use builtin `list` instead."
+"typing.Optional".msg = "For optional types, use the pipe syntax instead (`T | None`)."
+"typing.Set".msg = "Use builtin `set` instead."
+"typing.Tuple".msg = "Use builtin `tuple` instead."
