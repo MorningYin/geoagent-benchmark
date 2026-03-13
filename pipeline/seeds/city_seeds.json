@@ -1,0 +1,31 @@
+[
+  {"city": "beijing",  "lat": 39.9087, "lng": 116.3975, "area_type": "commercial",    "label": "北京·王府井商业区"},
+  {"city": "beijing",  "lat": 39.9042, "lng": 116.4074, "area_type": "tourist",        "label": "北京·天安门/故宫"},
+  {"city": "beijing",  "lat": 39.9999, "lng": 116.3266, "area_type": "university",     "label": "北京·清华/北大"},
+  {"city": "beijing",  "lat": 39.9021, "lng": 116.3818, "area_type": "transport_hub",   "label": "北京·北京西站"},
+  {"city": "beijing",  "lat": 39.8561, "lng": 116.4264, "area_type": "residential",     "label": "北京·方庄居住区"},
+
+  {"city": "shanghai", "lat": 31.2304, "lng": 121.4737, "area_type": "commercial",     "label": "上海·南京路/外滩"},
+  {"city": "shanghai", "lat": 31.1592, "lng": 121.6577, "area_type": "tourist",        "label": "上海·迪士尼度假区"},
+  {"city": "shanghai", "lat": 31.2990, "lng": 121.5000, "area_type": "university",     "label": "上海·复旦大学"},
+  {"city": "shanghai", "lat": 31.1979, "lng": 121.3362, "area_type": "transport_hub",   "label": "上海·虹桥火车站"},
+  {"city": "shanghai", "lat": 31.2135, "lng": 121.4476, "area_type": "residential",     "label": "上海·徐汇居住区"},
+
+  {"city": "guangzhou","lat": 23.1291, "lng": 113.2644, "area_type": "commercial",     "label": "广州·天河城商圈"},
+  {"city": "guangzhou","lat": 23.1066, "lng": 113.3242, "area_type": "tourist",        "label": "广州·广州塔/珠江"},
+  {"city": "guangzhou","lat": 23.0939, "lng": 113.3466, "area_type": "university",     "label": "广州·中山大学"},
+  {"city": "guangzhou","lat": 23.0021, "lng": 113.0642, "area_type": "transport_hub",   "label": "广州·广州南站"},
+  {"city": "guangzhou","lat": 23.1261, "lng": 113.2310, "area_type": "residential",     "label": "广州·荔湾西关"},
+
+  {"city": "hangzhou", "lat": 30.2489, "lng": 120.1500, "area_type": "commercial",     "label": "杭州·武林商圈"},
+  {"city": "hangzhou", "lat": 30.2422, "lng": 120.1489, "area_type": "tourist",        "label": "杭州·西湖景区"},
+  {"city": "hangzhou", "lat": 30.2633, "lng": 120.1217, "area_type": "university",     "label": "杭州·浙江大学"},
+  {"city": "hangzhou", "lat": 30.3020, "lng": 120.0860, "area_type": "transport_hub",   "label": "杭州·杭州东站"},
+  {"city": "hangzhou", "lat": 30.2780, "lng": 120.0030, "area_type": "residential",     "label": "杭州·城西银泰"},
+
+  {"city": "chengdu",  "lat": 30.5728, "lng": 104.0668, "area_type": "commercial",     "label": "成都·春熙路/太古里"},
+  {"city": "chengdu",  "lat": 30.6322, "lng": 104.0594, "area_type": "tourist",        "label": "成都·大熊猫基地"},
+  {"city": "chengdu",  "lat": 30.6320, "lng": 104.0830, "area_type": "university",     "label": "成都·四川大学"},
+  {"city": "chengdu",  "lat": 30.6112, "lng": 104.1378, "area_type": "transport_hub",   "label": "成都·成都东站"},
+  {"city": "chengdu",  "lat": 30.5450, "lng": 104.0650, "area_type": "residential",     "label": "成都·武侯居住区"}
+]
