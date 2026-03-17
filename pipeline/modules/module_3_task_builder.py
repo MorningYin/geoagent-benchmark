@@ -219,10 +219,16 @@ def _build_information_gap_plan(parsed: Dict[str, Any],
     # Image can provide location context
     if geo.get("level") in ("street", "building", "district"):
         image_provides.append("approximate_location")
+    elif geo.get("level") == "city":
+        image_provides.append("city_level_location")
     if ocr:
         image_provides.append("visible_text_clues")
     if scene:
         image_provides.append(f"scene_type:{scene}")
+    # Visible entities provide environmental context
+    entities = vp.get("visible_entities", [])
+    if len(entities) >= 2:
+        image_provides.append("environmental_context")
 
     # GPS provides coordinates
     gps_provides.append("exact_coordinates")

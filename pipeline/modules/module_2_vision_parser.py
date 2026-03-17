@@ -83,6 +83,20 @@ def _assess_richness(parse_result: Dict[str, Any]) -> str:
     return "low"
 
 
+_SCENE_TO_AREA_TYPE = {
+    "commercial_area": "commercial",
+    "transport_hub":   "transport_hub",
+    "campus":          "university",
+    "tourist_spot":    "tourist",
+    "residential":     "residential",
+}
+
+
+def _infer_area_type(scene_type: str) -> Optional[str]:
+    """Map vision-parsed scene_type to area_type (for GAEA sources lacking area_type)."""
+    return _SCENE_TO_AREA_TYPE.get(scene_type)
+
+
 def _assess_usable_tasks(parse_result: Dict[str, Any]) -> List[str]:
     """Determine which task types this image could support."""
     tasks = []
@@ -139,6 +153,10 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
             filtered_count += 1
             print(f"  -> filtered (low richness)")
             continue
+
+        # Backfill area_type from scene_type if not already set (e.g. GAEA source)
+        if not record.get("area_type"):
+            record["area_type"] = _infer_area_type(parse_result.get("scene_type", ""))
 
         parsed_record = {
             **record,
