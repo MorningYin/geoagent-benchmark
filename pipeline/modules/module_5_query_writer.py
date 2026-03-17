@@ -37,9 +37,21 @@ QUERY_REWRITE_FEW_SHOTS = """以下是几个好的转写示例，请学习这种
       place_category=restaurant, ranking_objective=highest_rated, distance_limit=1000
 转写: 第一次来这边，想找附近一公里内评价最好的餐厅吃饭，有推荐吗？
 
+示例4（图片是核心线索 — place_lookup）:
+输入: task_type=place_lookup, 图片中可见文字=["星巴克臻选", "南京西路1266号"],
+      familiarity=first_time_visitor, query_source=image_ocr
+转写: 我刚拍了张照片，上面好像写着"星巴克臻选"，在南京西路上。这是哪家店？能帮我确认一下具体位置吗？
+
+示例5（图片是核心线索 — geocode_resolution）:
+输入: task_type=geocode_resolution, 图片中可见文字=["建国门外大街", "永安里"],
+      familiarity=uncertain, query_source=image_geo_clue
+转写: 我看到路牌上写着"建国门外大街"和"永安里"，这里是北京哪个区？具体地址是什么？
+
 注意以下是差的转写风格，请避免：
 - "我要找一个药店，要求营业中，距离2000米以内" → 太像填表
-- 把所有字段平铺列出来 → 缺乏叙事感"""
+- 把所有字段平铺列出来 → 缺乏叙事感
+- "看看这张照片" → 如果图片里有明确文字，要引用具体文字而不是说"看看这张照片"
+- 对于 place_lookup / geocode_resolution，必须引用图片中的可见文字作为查询核心"""
 
 
 def _build_rewrite_prompt(task: Dict[str, Any]) -> str:
@@ -55,11 +67,27 @@ def _build_rewrite_prompt(task: Dict[str, Any]) -> str:
             f"以下信息不能出现在 query 中：{must_not_leak}\n"
         )
 
+    # ── Image instruction: varies by utility class ──
+    utility_class = task.get("image_utility_class", "context")
+    anchor_evidence = task.get("anchor_evidence")
     image_instruction = ""
-    if image_provides:
+
+    if utility_class == "anchor" and anchor_evidence:
+        signs = anchor_evidence.get("readable_signs", [])
+        geo_hint = anchor_evidence.get("geo_hint", "")
+        signs_str = "、".join(signs[:3])
         image_instruction = (
-            "\n## 图像上下文\n"
-            "用户同时发了一张街景照片。写 query 时可以用'看看这张照片'、'这附近'等口吻，\n"
+            "\n## 图像上下文（anchor 图 — 图片是核心线索）\n"
+            f"用户拍了一张照片，图中可以看到以下文字/标识：{signs_str}\n"
+            f"图片暗示的地理位置：{geo_hint}\n"
+            "写 query 时请**自然地引用图中可见的文字**（如'我看到路牌上写着XX'、'对面有个XX的招牌'），\n"
+            "让图片成为 query 的核心信息来源，而不是可有可无的附件。\n"
+            "**不要**用'看看这张照片'这种空洞说法。\n"
+        )
+    elif image_provides:
+        image_instruction = (
+            "\n## 图像上下文（context 图 — 图片是补充上下文）\n"
+            "用户同时发了一张街景照片。写 query 时可以用'我在这附近'、'看看我周围的环境'等口吻，\n"
             f"但不要重复图片已提供的信息：{image_provides}\n"
         )
 

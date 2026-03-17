@@ -1,4 +1,12 @@
-"""Module 2: Vision Parser — parse street view images with qwen-vl-max."""
+"""Module 2: Vision Parser — parse street view images and classify image utility.
+
+Two outputs per image:
+  1. vision_parse          — structured scene analysis from the vision LLM
+  2. image_utility_class   — anchor / context / weak (drives Module 3 task routing)
+  3. anchor_evidence       — (anchor only) extracted readable signs + geo info
+
+Filtering: "weak" images are discarded and do not enter Module 3.
+"""
 
 from __future__ import annotations
 
@@ -51,37 +59,112 @@ class VisionParser:
         return self.llm_client.vision_json_completion(image_path, VISION_PROMPT, temperature=0.3)
 
 
-def _assess_richness(parse_result: Dict[str, Any]) -> str:
-    """Programmatically assess information richness: high/medium/low."""
-    score = 0
+# ═══════════════════════════════════════════════════════════════════════════════
+# Image utility classification
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def classify_image_utility(parse_result: Dict[str, Any]) -> str:
+    """Classify image into anchor / context / weak.
+
+    anchor  — has readable text (OCR) AND fine-grained geo hints (street/building).
+              These images can serve as the primary information source for a task;
+              without them the agent cannot solve the problem.
+    context — has a recognisable scene type or coarse geo hints, but no text that
+              uniquely identifies a location. Useful as supplementary context.
+    weak    — too little information to contribute to any task. Discard.
+    """
     ocr = parse_result.get("ocr_texts", [])
+    geo = parse_result.get("geo_hints", {})
+    geo_level = geo.get("level", "unknown")
+    scene = parse_result.get("scene_type", "unknown")
     entities = parse_result.get("visible_entities", [])
+
+    has_readable_text = len(ocr) >= 1
+    has_fine_geo = geo_level in ("street", "building")
+    has_coarse_geo = geo_level in ("district", "city")
+    has_clear_scene = scene not in ("other", "unknown")
+
+    # ── anchor: readable text + fine-grained location ──
+    if has_readable_text and has_fine_geo:
+        return "anchor"
+
+    # ── anchor (relaxed): multiple OCR texts even with coarse geo ──
+    #    e.g. a photo with 3+ shop signs is highly informative
+    if len(ocr) >= 3 and has_coarse_geo:
+        return "anchor"
+
+    # ── context: has scene info or some geo hints ──
+    if has_clear_scene and (has_coarse_geo or has_fine_geo):
+        return "context"
+    if has_clear_scene and len(entities) >= 3:
+        return "context"
+    if has_readable_text and has_clear_scene:
+        # Has some text but geo is too vague to be anchor
+        return "context"
+
+    # ── weak: not enough signal ──
+    return "weak"
+
+
+def build_anchor_evidence(parse_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract anchor evidence from a vision parse result.
+
+    Returns None for non-anchor images.
+    """
+    ocr = parse_result.get("ocr_texts", [])
     geo = parse_result.get("geo_hints", {})
 
-    if len(ocr) >= 3:
-        score += 2
-    elif len(ocr) >= 1:
-        score += 1
+    if not ocr:
+        return None
 
-    if len(entities) >= 4:
-        score += 2
-    elif len(entities) >= 2:
-        score += 1
+    # Filter OCR: keep texts that look like place names / signs (≥2 chars)
+    readable_signs = [t for t in ocr if len(t.strip()) >= 2]
+    if not readable_signs:
+        return None
 
-    if geo.get("level") in ("street", "building"):
-        score += 2
-    elif geo.get("level") in ("district", "city"):
-        score += 1
+    return {
+        "readable_signs": readable_signs,
+        "geo_level": geo.get("level", "unknown"),
+        "geo_hint": geo.get("hint", ""),
+    }
 
-    if parse_result.get("scene_type") not in ("other", "unknown"):
-        score += 1
 
-    if score >= 5:
-        return "high"
-    if score >= 3:
-        return "medium"
-    return "low"
+# ═══════════════════════════════════════════════════════════════════════════════
+# Task routing helpers
+# ═══════════════════════════════════════════════════════════════════════════════
 
+def assess_usable_tasks(parse_result: Dict[str, Any],
+                        utility_class: str) -> List[str]:
+    """Determine which task types this image can support, based on utility class."""
+    ocr = parse_result.get("ocr_texts", [])
+    scene = parse_result.get("scene_type", "")
+
+    if utility_class == "anchor":
+        # Anchor images can drive tasks that require the image
+        tasks = ["place_lookup", "geocode_resolution"]
+        # Also usable for POI-based tasks
+        tasks.append("place_filter_rank")
+        if scene in ("commercial_area", "street", "intersection"):
+            tasks.append("place_discovery")
+        if scene == "transport_hub":
+            tasks.append("route_planning")
+        return tasks
+
+    if utility_class == "context":
+        tasks = ["place_filter_rank"]
+        if scene in ("commercial_area", "street", "intersection"):
+            tasks.append("place_discovery")
+        if scene == "transport_hub":
+            tasks.append("route_planning")
+        return tasks
+
+    # weak — should have been filtered, but return empty just in case
+    return []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Legacy / compat helpers
+# ═══════════════════════════════════════════════════════════════════════════════
 
 _SCENE_TO_AREA_TYPE = {
     "commercial_area": "commercial",
@@ -97,24 +180,9 @@ def _infer_area_type(scene_type: str) -> Optional[str]:
     return _SCENE_TO_AREA_TYPE.get(scene_type)
 
 
-def _assess_usable_tasks(parse_result: Dict[str, Any]) -> List[str]:
-    """Determine which task types this image could support."""
-    tasks = []
-    ocr = parse_result.get("ocr_texts", [])
-    scene = parse_result.get("scene_type", "")
-
-    # Almost any image with geo hints can support place_filter_rank
-    tasks.append("place_filter_rank")
-
-    if scene in ("commercial_area", "street", "intersection"):
-        tasks.append("place_discovery")
-    if ocr:
-        tasks.append("place_lookup")
-    if scene == "transport_hub":
-        tasks.append("route_planning")
-
-    return tasks
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
@@ -129,7 +197,7 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
         return PARSED_PATH
 
     results: List[Dict[str, Any]] = []
-    filtered_count = 0
+    stats = {"anchor": 0, "context": 0, "weak": 0}
 
     for i, record in enumerate(manifest, 1):
         image_path = record.get("image_path", "")
@@ -146,13 +214,17 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
             append_error(ERRORS_PATH, {"image_id": image_id, "error": str(e)})
             continue
 
-        richness = _assess_richness(parse_result)
-        usable_tasks = _assess_usable_tasks(parse_result)
+        # ── classify ──
+        utility_class = classify_image_utility(parse_result)
+        stats[utility_class] += 1
 
-        if richness == "low":
-            filtered_count += 1
-            print(f"  -> filtered (low richness)")
+        if utility_class == "weak":
+            print(f"  -> filtered (weak)")
             continue
+
+        # ── build fields ──
+        usable_tasks = assess_usable_tasks(parse_result, utility_class)
+        anchor_evidence = build_anchor_evidence(parse_result) if utility_class == "anchor" else None
 
         # Backfill area_type from scene_type if not already set (e.g. GAEA source)
         if not record.get("area_type"):
@@ -161,14 +233,18 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
         parsed_record = {
             **record,
             "vision_parse": parse_result,
-            "information_richness": richness,
+            "image_utility_class": utility_class,
+            "anchor_evidence": anchor_evidence,
             "usable_for_tasks": usable_tasks,
         }
         results.append(parsed_record)
-        print(f"  -> richness={richness}, usable_tasks={usable_tasks}")
+        sign_preview = anchor_evidence["readable_signs"][:3] if anchor_evidence else []
+        print(f"  -> {utility_class} | tasks={usable_tasks} | signs={sign_preview}")
 
     count = write_jsonl(PARSED_PATH, results)
-    print(f"[Module 2] Done. {count} parsed, {filtered_count} filtered (low richness)")
+    print(f"[Module 2] Done. {count} images kept "
+          f"(anchor={stats['anchor']}, context={stats['context']}), "
+          f"{stats['weak']} filtered (weak)")
     return PARSED_PATH
 
 

@@ -1,11 +1,17 @@
 """Module 3: Task Builder — construct tasks from real images + POI data.
 
-Two construction paths:
-  1. LLM-guided: LLM picks scenario_frame + task_type, fills dimensions, then
-     programmatic validators (ClassificationEngine, CoherenceEngine) hard-check.
-  2. Rule-based fallback: the original deterministic logic (place_filter_rank only).
+Three construction paths based on image_utility_class:
 
-If LLM path fails after retries, falls back to rule-based.
+  anchor images  →  _build_anchor_task()
+                    place_lookup / geocode_resolution (image is primary input)
+                    Falls back to LLM POI-based path on failure.
+
+  context images →  _llm_build_task()  (LLM picks scenario + fills dimensions)
+                    place_filter_rank / place_discovery
+                    Falls back to _rule_based_build_task().
+
+Diversity enforcement: task_type distribution is tracked across the batch and
+injected into the LLM Step 1 prompt to avoid monotony.
 """
 
 from __future__ import annotations
@@ -31,9 +37,12 @@ TASKS_PATH = DATA_OUT / "tasks.jsonl"
 ERRORS_PATH = DATA_OUT / "errors.jsonl"
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.json"
 
-# Task types the LLM path supports (need POI-based answer construction)
+# Task types supported per image utility class
+_ANCHOR_TASK_TYPES = {"place_lookup", "geocode_resolution", "place_filter_rank"}
+_CONTEXT_TASK_TYPES = {"place_filter_rank", "place_discovery"}
 _LLM_SUPPORTED_TASK_TYPES = {"place_filter_rank", "place_discovery"}
 _MAX_LLM_RETRIES = 2
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared helpers
@@ -92,33 +101,44 @@ def _poi_summary_list(pois: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _build_information_gap_plan(parsed: Dict[str, Any],
+                                task_type: str,
                                 task_dimensions: Dict[str, Any]) -> Dict[str, Any]:
     """Determine what info the image provides vs what must come from query/GPS."""
     vp = parsed.get("vision_parse", {})
     ocr = vp.get("ocr_texts", [])
     scene = vp.get("scene_type", "")
     geo = vp.get("geo_hints", {})
+    utility = parsed.get("image_utility_class", "context")
 
     image_provides = []
     query_must_state = []
     gps_provides = []
     must_not_leak = []
 
+    # ── image_provides ──
+    if utility == "anchor":
+        image_provides.append("primary_location_clue")
+        if ocr:
+            image_provides.append("visible_text_clues")
+            image_provides.append(f"readable_signs:{','.join(ocr[:3])}")
     if geo.get("level") in ("street", "building", "district"):
         image_provides.append("approximate_location")
     elif geo.get("level") == "city":
         image_provides.append("city_level_location")
-    if ocr:
-        image_provides.append("visible_text_clues")
     if scene:
         image_provides.append(f"scene_type:{scene}")
     entities = vp.get("visible_entities", [])
     if len(entities) >= 2:
         image_provides.append("environmental_context")
 
+    # ── gps_provides ──
     gps_provides.append("exact_coordinates")
-    gps_provides.append("search_center")
+    if task_type in ("place_filter_rank", "place_discovery"):
+        gps_provides.append("search_center")
 
+    # ── query_must_state ──
+    if task_type in ("place_lookup", "geocode_resolution"):
+        query_must_state.append("what_to_identify_from_image")
     category = task_dimensions.get("place_category_canonical", "")
     if category:
         query_must_state.append(f"need_category:{category}")
@@ -126,10 +146,14 @@ def _build_information_gap_plan(parsed: Dict[str, Any],
     if ranking:
         query_must_state.append(f"ranking_preference:{ranking}")
 
+    # ── must_not_leak ──
     must_not_leak.append("answer_place_name")
-    must_not_leak.append("exact_distances")
-    if task_dimensions.get("min_rating"):
-        must_not_leak.append("min_rating_threshold")
+    if task_type in ("place_filter_rank", "place_discovery"):
+        must_not_leak.append("exact_distances")
+        if task_dimensions.get("min_rating"):
+            must_not_leak.append("min_rating_threshold")
+    if task_type == "geocode_resolution":
+        must_not_leak.append("full_address")
 
     return {
         "image_provides": image_provides,
@@ -163,6 +187,55 @@ def _build_answer_data(answer_poi: Dict[str, Any],
     }
 
 
+def _build_global_context_for_scenario(parsed: Dict[str, Any],
+                                        scenario_id: str,
+                                        schema_loader: SchemaLoader) -> Dict[str, Any]:
+    """Build a global_context suitable for anchor tasks by sampling from the scenario frame."""
+    vp = parsed.get("vision_parse", {})
+    time_hint = vp.get("time_hint", "unknown")
+    weather_hint = vp.get("weather_hint", "unknown")
+
+    now = datetime.now(timezone.utc)
+    offset = random.randint(-7, 7)
+    hour = random.randint(8, 21)
+    request_time = (now + timedelta(days=offset)).replace(
+        hour=hour, minute=random.choice([0, 15, 30, 45]), second=0, microsecond=0)
+
+    weather_map = {"clear": "clear", "cloudy": None, "rain": "rain",
+                   "snow": "snow", "foggy": "foggy", "unknown": None}
+
+    # Start from scenario frame defaults
+    try:
+        frame = schema_loader.scenario_frame(scenario_id)
+        defaults = frame.get("default_context", {})
+        overrides = frame.get("likely_overrides", {})
+    except KeyError:
+        defaults = {}
+        overrides = {}
+
+    gc = {
+        "request_time": request_time.isoformat(),
+        "time_semantics": "now" if time_hint == "daytime" else "tonight" if time_hint == "nighttime" else None,
+        "weather_context": weather_map.get(weather_hint),
+        "user_party_composition": defaults.get("user_party_composition",
+                                                random.choice([None, "solo", "couple", "friends"])),
+        "mobility_context": defaults.get("mobility_context",
+                                          random.choice([None, "normal"])),
+        "urgency_level": defaults.get("urgency_level", "low"),
+        "familiarity_with_area": defaults.get("familiarity_with_area", "uncertain"),
+        "trip_state": defaults.get("trip_state",
+                                    random.choice(["touring", "routine_errand"])),
+        "language_preference": "zh-CN",
+    }
+
+    # Apply likely_overrides with some probability
+    for field, candidates in overrides.items():
+        if field in gc and candidates and random.random() < 0.5:
+            gc[field] = random.choice(candidates)
+
+    return gc
+
+
 def _assemble_task_record(parsed: Dict[str, Any], task_type: str,
                           global_context: Dict[str, Any],
                           task_dimensions: Dict[str, Any],
@@ -171,11 +244,11 @@ def _assemble_task_record(parsed: Dict[str, Any], task_type: str,
                           scenario_frame_id: Optional[str] = None,
                           construction_meta: Optional[Dict[str, Any]] = None,
                           ) -> Dict[str, Any]:
-    """Assemble the final task record (shared by LLM and rule-based paths)."""
+    """Assemble the final task record (shared by all construction paths)."""
     seed_lat = parsed["seed_lat"]
     seed_lng = parsed["seed_lng"]
 
-    info_gap = _build_information_gap_plan(parsed, task_dimensions)
+    info_gap = _build_information_gap_plan(parsed, task_type, task_dimensions)
     device_context = {
         "gps": {"lat": seed_lat, "lng": seed_lng},
         "current_time": global_context["request_time"],
@@ -187,6 +260,8 @@ def _assemble_task_record(parsed: Dict[str, Any], task_type: str,
         "image_path": parsed.get("image_path", ""),
         "task_type": task_type,
         "scenario_frame_id": scenario_frame_id,
+        "image_utility_class": parsed.get("image_utility_class", "context"),
+        "anchor_evidence": parsed.get("anchor_evidence"),
         "global_context": global_context,
         "task_dimensions": task_dimensions,
         "vision_parse": parsed.get("vision_parse"),
@@ -208,12 +283,201 @@ def _assemble_task_record(parsed: Dict[str, Any], task_type: str,
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LLM-guided construction
+# Anchor task construction (place_lookup / geocode_resolution)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _fuzzy_match_poi(ocr_texts: List[str],
+                     pois: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Try to match OCR texts against nearby POI names. Returns best match or None."""
+    for poi in pois:
+        poi_name = poi.get("displayName", {}).get("text", "").strip()
+        if not poi_name:
+            continue
+        for text in ocr_texts:
+            text = text.strip()
+            if not text or len(text) < 2:
+                continue
+            # Exact substring match (either direction)
+            if text in poi_name or poi_name in text:
+                return poi
+    return None
+
+
+def _build_place_lookup_task(parsed: Dict[str, Any],
+                              nearby_pois: List[Dict[str, Any]],
+                              maps: GoogleMapsClient,
+                              schema_loader: SchemaLoader) -> Dict[str, Any]:
+    """Build a place_lookup task where the image is the primary query.
+
+    The agent must identify the place shown in the image from its visible text/signs.
+    """
+    anchor = parsed.get("anchor_evidence", {})
+    ocr_texts = anchor.get("readable_signs", [])
+    seed_lat = parsed["seed_lat"]
+    seed_lng = parsed["seed_lng"]
+
+    _enrich_pois(nearby_pois, seed_lat, seed_lng, maps)
+
+    # Try to find a POI that matches one of the OCR texts
+    matched_poi = _fuzzy_match_poi(ocr_texts, nearby_pois)
+    if matched_poi is None:
+        raise ValueError(f"No POI matches OCR texts {ocr_texts}")
+
+    # task_dimensions for place_lookup
+    task_dimensions = {
+        "query_text": matched_poi.get("displayName", {}).get("text", ""),
+        "query_source": "image_ocr",
+        "search_region_type": "center_radius",
+        "search_region_value": {
+            "center_lat": seed_lat,
+            "center_lng": seed_lng,
+            "radius_m": 500,
+        },
+        "disambiguation_needed": False,
+    }
+
+    answer_data = {
+        "expected_place_name": matched_poi.get("displayName", {}).get("text", ""),
+        "expected_place_id": matched_poi.get("id", ""),
+        "expected_address": matched_poi.get("formattedAddress", ""),
+        "expected_lat": matched_poi.get("location", {}).get("latitude"),
+        "expected_lng": matched_poi.get("location", {}).get("longitude"),
+        "expected_distance_m": round(matched_poi.get("_distance_m", 0)),
+        "matched_ocr_text": next(
+            (t for t in ocr_texts
+             if t in matched_poi.get("displayName", {}).get("text", "")
+             or matched_poi.get("displayName", {}).get("text", "") in t),
+            ocr_texts[0] if ocr_texts else ""
+        ),
+    }
+
+    gc = _build_global_context_for_scenario(parsed, "photo_based_location_guess", schema_loader)
+
+    return _assemble_task_record(
+        parsed=parsed,
+        task_type="place_lookup",
+        global_context=gc,
+        task_dimensions=task_dimensions,
+        answer_data=answer_data,
+        nearby_poi_count=len(nearby_pois),
+        scenario_frame_id="photo_based_location_guess",
+        construction_meta={
+            "method": "anchor_place_lookup",
+            "matched_sign": answer_data["matched_ocr_text"],
+        },
+    )
+
+
+def _build_geocode_resolution_task(parsed: Dict[str, Any],
+                                    nearby_pois: List[Dict[str, Any]],
+                                    maps: GoogleMapsClient,
+                                    schema_loader: SchemaLoader) -> Dict[str, Any]:
+    """Build a geocode_resolution task where the image provides location clues.
+
+    The agent must determine the address / location from street signs and landmarks.
+    """
+    anchor = parsed.get("anchor_evidence", {})
+    seed_lat = parsed["seed_lat"]
+    seed_lng = parsed["seed_lng"]
+
+    _enrich_pois(nearby_pois, seed_lat, seed_lng, maps)
+
+    # Reverse geocode for the ground-truth address
+    geo_result = maps.reverse_geocode(seed_lat, seed_lng)
+    if not geo_result.get("formatted_address"):
+        raise ValueError("Reverse geocode returned empty address")
+
+    task_dimensions = {
+        "query_text": anchor.get("geo_hint", ""),
+        "query_source": "image_geo_clue",
+        "target_resolution_level": anchor.get("geo_level", "street"),
+    }
+
+    answer_data = {
+        "expected_address": geo_result["formatted_address"],
+        "expected_place_id": geo_result.get("place_id", ""),
+        "address_components": geo_result.get("address_components", []),
+        "expected_lat": seed_lat,
+        "expected_lng": seed_lng,
+        "visible_clues_used": anchor.get("readable_signs", []),
+    }
+
+    gc = _build_global_context_for_scenario(parsed, "photo_based_location_guess", schema_loader)
+
+    return _assemble_task_record(
+        parsed=parsed,
+        task_type="geocode_resolution",
+        global_context=gc,
+        task_dimensions=task_dimensions,
+        answer_data=answer_data,
+        nearby_poi_count=len(nearby_pois),
+        scenario_frame_id="photo_based_location_guess",
+        construction_meta={
+            "method": "anchor_geocode_resolution",
+            "geo_clues": anchor.get("readable_signs", [])[:3],
+        },
+    )
+
+
+def _build_anchor_task(parsed: Dict[str, Any],
+                       nearby_pois: List[Dict[str, Any]],
+                       maps: GoogleMapsClient,
+                       schema_loader: SchemaLoader,
+                       task_type_counts: Dict[str, int]) -> Dict[str, Any]:
+    """Route anchor images to the most appropriate task type.
+
+    Prefers place_lookup (if OCR matches a POI), then geocode_resolution,
+    with diversity balancing.
+    """
+    ocr_texts = parsed.get("anchor_evidence", {}).get("readable_signs", [])
+
+    # Check if place_lookup is viable (OCR matches a nearby POI)
+    _enrich_pois(nearby_pois, parsed["seed_lat"], parsed["seed_lng"], maps)
+    matched = _fuzzy_match_poi(ocr_texts, nearby_pois)
+
+    # Decide which anchor task to attempt based on viability and diversity
+    lookup_count = task_type_counts.get("place_lookup", 0)
+    geocode_count = task_type_counts.get("geocode_resolution", 0)
+
+    errors = []
+
+    if matched:
+        # place_lookup is viable — prefer it if under-represented
+        if lookup_count <= geocode_count:
+            try:
+                return _build_place_lookup_task(parsed, nearby_pois, maps, schema_loader)
+            except Exception as e:
+                errors.append(f"place_lookup: {e}")
+
+        # Try geocode_resolution
+        try:
+            return _build_geocode_resolution_task(parsed, nearby_pois, maps, schema_loader)
+        except Exception as e:
+            errors.append(f"geocode_resolution: {e}")
+
+        # Fallback to place_lookup if geocode failed
+        try:
+            return _build_place_lookup_task(parsed, nearby_pois, maps, schema_loader)
+        except Exception as e:
+            errors.append(f"place_lookup fallback: {e}")
+    else:
+        # No POI match — try geocode_resolution
+        try:
+            return _build_geocode_resolution_task(parsed, nearby_pois, maps, schema_loader)
+        except Exception as e:
+            errors.append(f"geocode_resolution: {e}")
+
+    raise ValueError(f"All anchor task paths failed: {'; '.join(errors)}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LLM-guided construction (place_filter_rank / place_discovery)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _build_step1_prompt(parsed: Dict[str, Any],
                         poi_summary: List[Dict[str, Any]],
-                        schema_loader: SchemaLoader) -> List[Dict[str, str]]:
+                        schema_loader: SchemaLoader,
+                        task_type_counts: Dict[str, int]) -> List[Dict[str, str]]:
     """Build prompt for Step 1: pick scenario_frame + task_type."""
     vp = parsed.get("vision_parse", {})
     cat_counts = Counter(p["category"] for p in poi_summary)
@@ -229,6 +493,14 @@ def _build_step1_prompt(parsed: Dict[str, Any],
             "default_context": fr["default_context"],
             "compatible_task_types": compatible,
         })
+
+    # Diversity hint
+    diversity_hint = ""
+    if task_type_counts:
+        diversity_hint = f"""
+## 多样性要求
+当前已生成任务类型分布: {json.dumps(task_type_counts, ensure_ascii=False)}
+请优先选择数量较少的类型，避免全部集中在同一类型。特别是如果 place_filter_rank 已经较多，请尝试 place_discovery。"""
 
     system = "你是一个地理智能体基准测试的任务设计师。你需要根据图片场景和附近 POI 分布，选择最合适的场景框架和任务类型。"
 
@@ -249,6 +521,7 @@ def _build_step1_prompt(parsed: Dict[str, Any],
 ## 任务类型说明
 - place_filter_rank: 多约束筛选+排序，需要 ranking_objective，至少 2 个筛选维度，适合"找最近的/评分最高的某类店"
 - place_discovery: 简单发现，最多 1 个筛选维度，无排序，适合"附近有没有某类店"
+{diversity_hint}
 
 ## 要求
 1. 从上面的场景框架中选择一个最贴合图片场景的 scenario_id
@@ -424,7 +697,6 @@ def _validate_llm_output(task_type: str, scenario_frame_id: str,
         ranking = task_dimensions.get("ranking_objective")
         category = task_dimensions.get("place_category_canonical")
         if ranking and category and answer_poi:
-            # Find all POIs matching category and constraints
             qualifying = [p for p in poi_summary
                           if p["category"] == category
                           and (not distance_limit or p["distance_m"] <= distance_limit)
@@ -446,7 +718,8 @@ def _validate_llm_output(task_type: str, scenario_frame_id: str,
 
 def _llm_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, Any]],
                     maps: GoogleMapsClient, schema_loader: SchemaLoader,
-                    llm: BaseLLMClient) -> Dict[str, Any]:
+                    llm: BaseLLMClient,
+                    task_type_counts: Dict[str, int]) -> Dict[str, Any]:
     """LLM-guided task construction with validation loop."""
     seed_lat = parsed["seed_lat"]
     seed_lng = parsed["seed_lng"]
@@ -458,7 +731,7 @@ def _llm_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, Any]],
         raise ValueError("Not enough categorizable POIs for LLM path")
 
     # ── Step 1: Pick scenario_frame + task_type ──
-    step1_messages = _build_step1_prompt(parsed, poi_summary, schema_loader)
+    step1_messages = _build_step1_prompt(parsed, poi_summary, schema_loader, task_type_counts)
     step1 = llm.json_completion(step1_messages, temperature=0.7)
 
     step1_errors = _validate_step1(step1, schema_loader)
@@ -470,6 +743,8 @@ def _llm_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, Any]],
     # ── Step 2 + 3: Fill dimensions + validate (with retry loop) ──
     violations: Optional[List[str]] = None
     step2: Optional[Dict[str, Any]] = None
+    is_valid = False
+    attempt = 0
 
     for attempt in range(_MAX_LLM_RETRIES + 1):
         step2_messages = _build_step2_prompt(step1, parsed, poi_summary, schema_loader, violations)
@@ -625,23 +900,40 @@ def _rule_based_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, A
 
 def build_task(parsed: Dict[str, Any], maps: GoogleMapsClient,
                schema_loader: SchemaLoader,
-               llm: Optional[BaseLLMClient] = None) -> Dict[str, Any]:
-    """Build a complete task record. Uses LLM if available, falls back to rules."""
+               llm: Optional[BaseLLMClient] = None,
+               task_type_counts: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    """Build a complete task record.
+
+    Routing:
+      anchor images → _build_anchor_task (place_lookup / geocode_resolution)
+                       → fallback to LLM / rule-based
+      context images → LLM (place_filter_rank / place_discovery)
+                        → fallback to rule-based
+    """
     seed_lat = parsed["seed_lat"]
     seed_lng = parsed["seed_lng"]
+    utility_class = parsed.get("image_utility_class", "context")
+    counts = task_type_counts or {}
 
     nearby_pois = maps.nearby_search(lat=seed_lat, lng=seed_lng, radius_m=1000, max_results=15)
     if len(nearby_pois) < 2:
         raise ValueError(f"Not enough POIs near ({seed_lat}, {seed_lng})")
 
-    # Try LLM path
+    # ── anchor images: try image-critical tasks first ──
+    if utility_class == "anchor":
+        try:
+            return _build_anchor_task(parsed, nearby_pois, maps, schema_loader, counts)
+        except Exception as e:
+            print(f"    [anchor] failed ({e}), falling back to LLM/rule path")
+
+    # ── LLM path (place_filter_rank / place_discovery) ──
     if llm and llm.available:
         try:
-            return _llm_build_task(parsed, nearby_pois, maps, schema_loader, llm)
+            return _llm_build_task(parsed, nearby_pois, maps, schema_loader, llm, counts)
         except Exception as e:
             print(f"    [LLM] failed, falling back to rule-based: {e}")
 
-    # Fallback to rule-based
+    # ── rule-based fallback ──
     return _rule_based_build_task(parsed, nearby_pois, maps)
 
 
@@ -659,31 +951,42 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
         return TASKS_PATH
 
     results: List[Dict[str, Any]] = []
-    llm_count = 0
-    fallback_count = 0
+    task_type_counts: Dict[str, int] = Counter()
+    method_counts: Dict[str, int] = Counter()
 
     for i, parsed in enumerate(parsed_records, 1):
         image_id = parsed.get("image_id", "")
-        print(f"[Module 3] Building task {i}/{len(parsed_records)}: {image_id}")
+        utility = parsed.get("image_utility_class", "?")
+        print(f"[Module 3] Building task {i}/{len(parsed_records)}: {image_id} ({utility})")
 
         try:
-            task = build_task(parsed, maps, schema_loader, llm=llm)
+            task = build_task(parsed, maps, schema_loader, llm=llm,
+                              task_type_counts=dict(task_type_counts))
             results.append(task)
+
+            tt = task["task_type"]
             method = task.get("construction_metadata", {}).get("method", "unknown")
-            if method == "llm":
-                llm_count += 1
-            else:
-                fallback_count += 1
-            print(f"  -> [{method}] task_type={task['task_type']}, "
-                  f"category={task['task_dimensions'].get('place_category_canonical')}, "
-                  f"scenario={task.get('scenario_frame_id', 'N/A')}")
+            task_type_counts[tt] += 1
+            method_counts[method] += 1
+
+            extra = ""
+            if tt in ("place_filter_rank", "place_discovery"):
+                extra = f", category={task['task_dimensions'].get('place_category_canonical')}"
+            elif tt == "place_lookup":
+                extra = f", matched={task.get('construction_metadata', {}).get('matched_sign', '')}"
+            elif tt == "geocode_resolution":
+                extra = f", addr={task['answer_data'].get('expected_address', '')[:30]}"
+
+            print(f"  -> [{method}] {tt}{extra}")
         except Exception as e:
             append_error(ERRORS_PATH, {"image_id": image_id, "error": str(e)})
             print(f"  -> FAILED: {e}")
             continue
 
     count = write_jsonl(TASKS_PATH, results)
-    print(f"[Module 3] Done. {count} tasks (LLM: {llm_count}, rule-based: {fallback_count})")
+    print(f"\n[Module 3] Done. {count} tasks")
+    print(f"  Type distribution: {dict(task_type_counts)}")
+    print(f"  Method distribution: {dict(method_counts)}")
     return TASKS_PATH
 
 

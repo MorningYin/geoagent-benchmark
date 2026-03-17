@@ -13,6 +13,7 @@ from .config import PipelineConfig
 _NEARBY_SEARCH_URL = "https://places.googleapis.com/v1/places:searchNearby"
 _PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 _STREET_VIEW_URL = "https://maps.googleapis.com/maps/api/streetview"
+_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 
 class GoogleMapsClient:
@@ -98,6 +99,32 @@ class GoogleMapsClient:
         resp = self._session.get(url, timeout=20)
         resp.raise_for_status()
         return resp.content
+
+    # ── Reverse Geocoding ──
+    def reverse_geocode(self, lat: float, lng: float,
+                        language: str = "zh-CN") -> Dict[str, Any]:
+        """Reverse geocode coordinates to a structured address.
+
+        Returns the first (most specific) result from Google Geocoding API.
+        """
+        params = {
+            "latlng": f"{lat},{lng}",
+            "language": language,
+            "key": self._api_key,
+        }
+        resp = self._session.get(_GEOCODE_URL, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("results", [])
+        if not results:
+            return {"formatted_address": "", "address_components": [], "place_id": ""}
+        first = results[0]
+        return {
+            "formatted_address": first.get("formatted_address", ""),
+            "address_components": first.get("address_components", []),
+            "place_id": first.get("place_id", ""),
+            "types": first.get("types", []),
+        }
 
     # ── Utility: compute heading from seed to POI ──
     @staticmethod

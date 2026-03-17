@@ -1,8 +1,9 @@
-"""Module 4: Quality Gate — three-layer quality check.
+"""Module 4: Quality Gate — four-layer quality check.
 
 Layer 1: Programmatic rules (CoherenceEngine)
 Layer 2: Image necessity check (information_gap_plan validity)
-Layer 3: LLM plausibility review (qwen-plus)
+Layer 3: Image contribution check (image_utility_class vs task_type alignment)
+Layer 4: LLM plausibility review
 """
 
 from __future__ import annotations
@@ -48,6 +49,36 @@ def _check_image_necessity(task: Dict[str, Any]) -> Dict[str, Any]:
         "passed": len(issues) == 0,
         "issues": issues,
     }
+
+
+def _check_image_contribution(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Layer 3: Verify image actually contributes to the task per its utility class."""
+    task_type = task.get("task_type", "")
+    utility_class = task.get("image_utility_class", "context")
+    info_gap = task.get("information_gap_plan", {})
+    image_provides = info_gap.get("image_provides", [])
+    issues = []
+
+    # place_lookup / geocode_resolution: image MUST be anchor
+    if task_type in ("place_lookup", "geocode_resolution"):
+        if utility_class != "anchor":
+            issues.append(f"{task_type} requires anchor image, got {utility_class}")
+        if "primary_location_clue" not in image_provides and "visible_text_clues" not in image_provides:
+            issues.append(f"{task_type} but image provides no text clues or location clue")
+
+    # place_filter_rank / place_discovery: image should provide meaningful info
+    if task_type in ("place_filter_rank", "place_discovery"):
+        useful_signals = {"approximate_location", "visible_text_clues",
+                          "primary_location_clue", "city_level_location"}
+        has_useful = any(
+            any(sig in p for sig in useful_signals)
+            for p in image_provides
+        )
+        if not has_useful and len(image_provides) <= 1:
+            issues.append("Image provides only environmental_context or scene_type — "
+                          "minimal contribution to POI-based task")
+
+    return {"passed": len(issues) == 0, "issues": issues}
 
 
 def _llm_plausibility_check(task: Dict[str, Any], llm: BaseLLMClient) -> Dict[str, Any]:
@@ -112,7 +143,13 @@ def check_task(task: Dict[str, Any], schema_loader: SchemaLoader,
         report["passed"] = False
         report["rejection_reasons"].extend(img_check["issues"])
 
-    # Layer 3: LLM plausibility (only if previous layers passed, to save API calls)
+    # Layer 3: Image contribution alignment
+    contrib_check = _check_image_contribution(task)
+    if not contrib_check["passed"]:
+        report["passed"] = False
+        report["rejection_reasons"].extend(contrib_check["issues"])
+
+    # Layer 4: LLM plausibility (only if previous layers passed, to save API calls)
     if report["passed"] and llm.available:
         try:
             llm_result = _llm_plausibility_check(task, llm)
