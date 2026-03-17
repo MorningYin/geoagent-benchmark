@@ -73,11 +73,17 @@ def classify_image_utility(parse_result: Dict[str, Any]) -> str:
               uniquely identifies a location. Useful as supplementary context.
     weak    — too little information to contribute to any task. Discard.
     """
-    ocr = parse_result.get("ocr_texts", [])
+    raw_ocr = parse_result.get("ocr_texts", [])
     geo = parse_result.get("geo_hints", {})
     geo_level = geo.get("level", "unknown")
     scene = parse_result.get("scene_type", "unknown")
     entities = parse_result.get("visible_entities", [])
+
+    # Filter out watermarks / copyright / generic noise before classifying
+    _NOISE = {"google", "©", "copyright", "imagery", "map data",
+              "street view", "all rights reserved"}
+    ocr = [t for t in raw_ocr if len(t.strip()) >= 2
+           and not any(n in t.lower() for n in _NOISE)]
 
     has_readable_text = len(ocr) >= 1
     has_fine_geo = geo_level in ("street", "building")
@@ -117,8 +123,14 @@ def build_anchor_evidence(parse_result: Dict[str, Any]) -> Optional[Dict[str, An
     if not ocr:
         return None
 
-    # Filter OCR: keep texts that look like place names / signs (≥2 chars)
-    readable_signs = [t for t in ocr if len(t.strip()) >= 2]
+    # Filter OCR: remove watermarks, copyright notices, and generic text
+    _NOISE_PATTERNS = {"google", "©", "copyright", "imagery", "map data",
+                       "street view", "all rights reserved"}
+    readable_signs = [
+        t for t in ocr
+        if len(t.strip()) >= 2
+        and not any(noise in t.lower() for noise in _NOISE_PATTERNS)
+    ]
     if not readable_signs:
         return None
 

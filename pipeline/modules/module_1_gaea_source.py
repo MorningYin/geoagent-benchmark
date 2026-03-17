@@ -15,6 +15,7 @@ Prerequisites:
 from __future__ import annotations
 
 import io
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -30,9 +31,13 @@ MANIFEST_PATH = DATA_DIR / "manifest.jsonl"
 ERRORS_PATH = DATA_DIR / "errors.jsonl"
 
 # HuggingFace Dataset Viewer API
-ROWS_API = "https://datasets-server.huggingface.co/rows"
+# 默认用官方源；国内如果连不上，设置 HF_ROWS_API 环境变量指向可用镜像
+ROWS_API = os.environ.get(
+    "HF_ROWS_API",
+    "https://datasets-server.huggingface.co/rows"
+)
 DATASET_ID = "ucf-crcv/GAEA-Train"
-PAGE_SIZE = 100  # max rows per API call
+PAGE_SIZE = 20  # keep small to avoid 429 rate limits on mirrors
 
 PREFERRED_SUBSETS = {"Conversational"}
 
@@ -49,16 +54,26 @@ def _is_valid_coord(lat: float, lng: float) -> bool:
     return -90 <= lat <= 90 and -180 <= lng <= 180
 
 
-def _fetch_rows(offset: int, length: int) -> List[Dict[str, Any]]:
-    """Fetch a page of rows from the Dataset Viewer API."""
-    resp = requests.get(ROWS_API, params={
-        "dataset": DATASET_ID,
-        "config": "default",
-        "split": "train",
-        "offset": offset,
-        "length": length,
-    }, timeout=60)
-    resp.raise_for_status()
+def _fetch_rows(offset: int, length: int, max_retries: int = 3) -> List[Dict[str, Any]]:
+    """Fetch a page of rows from the Dataset Viewer API with retry on 429."""
+    import time
+    for attempt in range(max_retries):
+        resp = requests.get(ROWS_API, params={
+            "dataset": DATASET_ID,
+            "config": "default",
+            "split": "train",
+            "offset": offset,
+            "length": length,
+        }, timeout=60)
+        if resp.status_code == 429:
+            wait = 2 ** attempt + 1  # 2, 3, 5 seconds
+            print(f"[Module 1 / GAEA]   429 rate limited, waiting {wait}s...")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        break
+    else:
+        resp.raise_for_status()  # raise the last 429
     data = resp.json()
     return [item["row"] for item in data.get("rows", [])]
 
