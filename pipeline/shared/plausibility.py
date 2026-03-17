@@ -6,11 +6,11 @@ import json
 from typing import Any, Dict, List
 
 from .data_models import CoherenceViolation, CoherenceValidation
-from .llm_client import DashScopeClient
+from .llm_client import BaseLLMClient
 
 
 class PlausibilityChecker:
-    def __init__(self, llm_client: DashScopeClient):
+    def __init__(self, llm_client: BaseLLMClient):
         self.llm_client = llm_client
 
     def validate(self, task_type: str, scenario_frame: Dict[str, Any],

@@ -1,20 +1,79 @@
 # GeoAgentBench Pipeline v3 配置文件
+# ──────────────────────────────────────────────────────────────────────────────
 # 复制为 config.yaml 并填入真实 API Key
+#
+# 模型分工（stage_models 中修改，代码不动）：
+#
+#   vision_parse   → Module 2  图片解析（需要视觉能力）
+#   task_design    → Module 3  任务设计（最需要推理+创造力，未来换大模型）
+#   quality_llm    → Module 4  合理性质控
+#   query_rewrite  → Module 5  自然语言转写（未来换大模型）
+#   query_verify   → Module 5  反向泄漏检测
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Google Maps API 配置
+# ── Google Maps ──────────────────────────────────────────────────────────────
 google_maps:
   api_key: "YOUR_GOOGLE_MAPS_API_KEY"
 
-# 阿里通义千问 DashScope API 配置
+# ── 模型端点定义（每个 endpoint 是一个可调用的模型+连接） ───────────────────
+# provider 支持：
+#   openai_compatible  任何 OpenAI 协议的接口（DashScope、中转站、OpenAI 本身）
+#   anthropic          Anthropic 原生 SDK（需要 pip install anthropic）
+model_endpoints:
+
+  # ── 示例：全线千问（调试推荐） ──
+  qwen_vl:
+    provider: openai_compatible
+    model: qwen-vl-max
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: "YOUR_DASHSCOPE_API_KEY"
+    supports_vision: true
+
+  qwen_default:
+    provider: openai_compatible
+    model: qwen-plus
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: "YOUR_DASHSCOPE_API_KEY"
+
+  qwen_strong:
+    provider: openai_compatible
+    model: qwen-max
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: "YOUR_DASHSCOPE_API_KEY"
+
+  # ── 示例：Claude via 中转站（OpenAI 协议） ──
+  # claude_opus_relay:
+  #   provider: openai_compatible
+  #   model: claude-opus-4-6
+  #   base_url: "https://your-relay.com/v1"
+  #   api_key: "YOUR_RELAY_KEY"
+  #   supports_vision: true
+
+  # ── 示例：Claude 官方原生 API ──
+  # claude_opus:
+  #   provider: anthropic
+  #   model: claude-opus-4-6
+  #   api_key: "YOUR_ANTHROPIC_API_KEY"
+
+  # claude_haiku:
+  #   provider: anthropic
+  #   model: claude-haiku-4-5-20251001
+  #   api_key: "YOUR_ANTHROPIC_API_KEY"
+
+# ── 阶段 → 端点映射（改这里切换某个阶段的模型，代码不动） ───────────────────
+stage_models:
+  vision_parse:   qwen_vl        # Module 2  → 换视觉更强的模型改这行
+  task_design:    qwen_default   # Module 3  → 换 claude_opus 改这行
+  quality_llm:    qwen_default   # Module 4  → 换 claude_haiku 改这行
+  query_rewrite:  qwen_strong    # Module 5  → 换 claude_opus 改这行
+  query_verify:   qwen_default   # Module 5  → 换 claude_haiku 改这行
+
+# ── 旧格式兼容（保留，不删） ──────────────────────────────────────────────
 dashscope:
   api_key: "YOUR_DASHSCOPE_API_KEY"
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-# 模型选择（集中管理，方便后续切换为自部署模型）
 models:
-  # 视觉模型（图像解析）
   vision: "qwen-vl-max"
-  # 文本生成模型（结构化数据生成、质控审核、反向校验）
   text: "qwen-plus"
-  # 文本生成模型（自然语言转写，需要更强语言能力）
   text_strong: "qwen-max"

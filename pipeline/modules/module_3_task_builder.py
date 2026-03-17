@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from shared.config import PipelineConfig
 from shared.maps_client import GoogleMapsClient
-from shared.llm_client import DashScopeClient
+from shared.llm_client import BaseLLMClient, ClientFactory, STAGE_TASK_DESIGN
 from shared.schema_loader import SchemaLoader
 from shared.coherence import ClassificationEngine, CoherenceEngine
 from shared.jsonl_io import read_jsonl, write_jsonl, append_error
@@ -446,7 +446,7 @@ def _validate_llm_output(task_type: str, scenario_frame_id: str,
 
 def _llm_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, Any]],
                     maps: GoogleMapsClient, schema_loader: SchemaLoader,
-                    llm: DashScopeClient) -> Dict[str, Any]:
+                    llm: BaseLLMClient) -> Dict[str, Any]:
     """LLM-guided task construction with validation loop."""
     seed_lat = parsed["seed_lat"]
     seed_lng = parsed["seed_lng"]
@@ -625,7 +625,7 @@ def _rule_based_build_task(parsed: Dict[str, Any], nearby_pois: List[Dict[str, A
 
 def build_task(parsed: Dict[str, Any], maps: GoogleMapsClient,
                schema_loader: SchemaLoader,
-               llm: Optional[DashScopeClient] = None) -> Dict[str, Any]:
+               llm: Optional[BaseLLMClient] = None) -> Dict[str, Any]:
     """Build a complete task record. Uses LLM if available, falls back to rules."""
     seed_lat = parsed["seed_lat"]
     seed_lng = parsed["seed_lng"]
@@ -649,7 +649,7 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
     maps = GoogleMapsClient(config)
     schema_loader = SchemaLoader(SCHEMA_PATH)
-    llm = DashScopeClient(config)
+    llm = ClientFactory.for_stage(STAGE_TASK_DESIGN, config)
 
     DATA_OUT.mkdir(parents=True, exist_ok=True)
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from shared.config import PipelineConfig
-from shared.llm_client import DashScopeClient
+from shared.llm_client import BaseLLMClient, ClientFactory, STAGE_QUALITY_LLM
 from shared.schema_loader import SchemaLoader
 from shared.coherence import ClassificationEngine, CoherenceEngine
 from shared.plausibility import PlausibilityChecker
@@ -50,7 +50,7 @@ def _check_image_necessity(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _llm_plausibility_check(task: Dict[str, Any], llm: DashScopeClient) -> Dict[str, Any]:
+def _llm_plausibility_check(task: Dict[str, Any], llm: BaseLLMClient) -> Dict[str, Any]:
     """Layer 3: LLM checks overall task plausibility."""
     prompt = {
         "task_type": task.get("task_type"),
@@ -78,7 +78,7 @@ def _llm_plausibility_check(task: Dict[str, Any], llm: DashScopeClient) -> Dict[
 def check_task(task: Dict[str, Any], schema_loader: SchemaLoader,
                coherence_engine: CoherenceEngine,
                classification_engine: ClassificationEngine,
-               llm: DashScopeClient) -> Dict[str, Any]:
+               llm: BaseLLMClient) -> Dict[str, Any]:
     """Run all three quality layers. Returns quality report."""
     report: Dict[str, Any] = {
         "image_id": task.get("image_id"),
@@ -129,7 +129,7 @@ def check_task(task: Dict[str, Any], schema_loader: SchemaLoader,
 
 def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
-    llm = DashScopeClient(config)
+    llm = ClientFactory.for_stage(STAGE_QUALITY_LLM, config)
     schema_loader = SchemaLoader(SCHEMA_PATH)
     classification_engine = ClassificationEngine(schema_loader)
     coherence_engine = CoherenceEngine(schema_loader, classification_engine)

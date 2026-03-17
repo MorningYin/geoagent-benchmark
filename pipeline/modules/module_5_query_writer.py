@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from shared.config import PipelineConfig
-from shared.llm_client import DashScopeClient
+from shared.llm_client import BaseLLMClient, ClientFactory, STAGE_QUERY_REWRITE, STAGE_QUERY_VERIFY
 from shared.jsonl_io import read_jsonl, write_jsonl, append_error
 
 DATA_IN = Path(__file__).resolve().parent.parent / "data" / "04_quality"
@@ -88,7 +88,7 @@ def _build_rewrite_prompt(task: Dict[str, Any]) -> str:
     return prompt
 
 
-def _reverse_verify(query: str, task: Dict[str, Any], llm: DashScopeClient) -> bool:
+def _reverse_verify(query: str, task: Dict[str, Any], llm: BaseLLMClient) -> bool:
     """Use qwen-plus to check if the query leaks answer information."""
     info_gap = task.get("information_gap_plan", {})
     must_not_leak = info_gap.get("must_not_leak_in_query", [])
@@ -113,19 +113,30 @@ def _reverse_verify(query: str, task: Dict[str, Any], llm: DashScopeClient) -> b
     return not result.get("leaked", False)
 
 
-def rewrite_query(task: Dict[str, Any], llm: DashScopeClient, max_retries: int = 2) -> str:
-    """Rewrite task to natural language, with reverse verification."""
+def rewrite_query(task: Dict[str, Any],
+                  llm_rewrite: BaseLLMClient,
+                  llm_verify: Optional[BaseLLMClient] = None,
+                  max_retries: int = 2) -> str:
+    """Rewrite task to natural language, with reverse verification.
+
+    Args:
+        llm_rewrite: model used for NL rewriting (STAGE_QUERY_REWRITE)
+        llm_verify:  model used for leak detection (STAGE_QUERY_VERIFY).
+                     Falls back to llm_rewrite if not provided.
+    """
+    verifier = llm_verify or llm_rewrite
     prompt_text = _build_rewrite_prompt(task)
     messages = [{"role": "user", "content": prompt_text}]
+    query = ""
 
     for attempt in range(max_retries + 1):
-        query = llm.rewrite_completion(messages, temperature=0.8)
+        query = llm_rewrite.rewrite_completion(messages, temperature=0.8)
 
         if not query.strip():
             continue
 
-        # Reverse verify
-        if _reverse_verify(query, task, llm):
+        # Reverse verify with the designated verifier model
+        if _reverse_verify(query, task, verifier):
             return query.strip()
 
         # If leaked, add feedback and retry
@@ -138,7 +149,8 @@ def rewrite_query(task: Dict[str, Any], llm: DashScopeClient, max_retries: int =
 
 def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
-    llm = DashScopeClient(config)
+    llm_rewrite = ClientFactory.for_stage(STAGE_QUERY_REWRITE, config)
+    llm_verify  = ClientFactory.for_stage(STAGE_QUERY_VERIFY, config)
 
     DATA_OUT.mkdir(parents=True, exist_ok=True)
 
@@ -154,7 +166,7 @@ def main(config: Optional[PipelineConfig] = None) -> Path:
         print(f"[Module 5] Rewriting query {i}/{len(tasks)}: {image_id}")
 
         try:
-            query = rewrite_query(task, llm)
+            query = rewrite_query(task, llm_rewrite, llm_verify)
             task["natural_language_query"] = query
 
             # Build agent_input

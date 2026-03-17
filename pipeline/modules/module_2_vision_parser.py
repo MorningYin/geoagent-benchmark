@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from shared.config import PipelineConfig
-from shared.llm_client import DashScopeClient
+from shared.llm_client import BaseLLMClient, ClientFactory, STAGE_VISION_PARSE
 from shared.jsonl_io import read_jsonl, write_jsonl, append_error
 
 DATA_IN = Path(__file__).resolve().parent.parent / "data" / "01_images"
@@ -44,7 +44,7 @@ VISION_PROMPT = """你是一个地理场景分析专家。请仔细观察这张�
 class VisionParser:
     """Parse street view images using a vision LLM."""
 
-    def __init__(self, llm_client: DashScopeClient):
+    def __init__(self, llm_client: BaseLLMClient):
         self.llm_client = llm_client
 
     def parse_image(self, image_path: str | Path) -> Dict[str, Any]:
@@ -118,7 +118,7 @@ def _assess_usable_tasks(parse_result: Dict[str, Any]) -> List[str]:
 
 def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
-    llm = DashScopeClient(config)
+    llm = ClientFactory.for_stage(STAGE_VISION_PARSE, config)
     parser = VisionParser(llm)
 
     DATA_OUT.mkdir(parents=True, exist_ok=True)
