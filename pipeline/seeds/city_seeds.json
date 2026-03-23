@@ -1,31 +1,228 @@
 [
-  {"city": "beijing",  "lat": 39.9087, "lng": 116.3975, "area_type": "commercial",    "label": "北京·王府井商业区"},
-  {"city": "beijing",  "lat": 39.9042, "lng": 116.4074, "area_type": "tourist",        "label": "北京·天安门/故宫"},
-  {"city": "beijing",  "lat": 39.9999, "lng": 116.3266, "area_type": "university",     "label": "北京·清华/北大"},
-  {"city": "beijing",  "lat": 39.9021, "lng": 116.3818, "area_type": "transport_hub",   "label": "北京·北京西站"},
-  {"city": "beijing",  "lat": 39.8561, "lng": 116.4264, "area_type": "residential",     "label": "北京·方庄居住区"},
+  {"city": "beijing",      "lat": 39.9087, "lng": 116.3975, "area_type": "commercial",    "label": "Beijing · Wangfujing"},
+  {"city": "beijing",      "lat": 39.9042, "lng": 116.4074, "area_type": "tourist",       "label": "Beijing · Tiananmen"},
+  {"city": "beijing",      "lat": 39.9999, "lng": 116.3266, "area_type": "university",    "label": "Beijing · Tsinghua/PKU"},
+  {"city": "beijing",      "lat": 39.9021, "lng": 116.3818, "area_type": "transport_hub",  "label": "Beijing · West Railway Station"},
+  {"city": "beijing",      "lat": 39.9390, "lng": 116.4170, "area_type": "commercial",    "label": "Beijing · Sanlitun"},
 
-  {"city": "shanghai", "lat": 31.2304, "lng": 121.4737, "area_type": "commercial",     "label": "上海·南京路/外滩"},
-  {"city": "shanghai", "lat": 31.1592, "lng": 121.6577, "area_type": "tourist",        "label": "上海·迪士尼度假区"},
-  {"city": "shanghai", "lat": 31.2990, "lng": 121.5000, "area_type": "university",     "label": "上海·复旦大学"},
-  {"city": "shanghai", "lat": 31.1979, "lng": 121.3362, "area_type": "transport_hub",   "label": "上海·虹桥火车站"},
-  {"city": "shanghai", "lat": 31.2135, "lng": 121.4476, "area_type": "residential",     "label": "上海·徐汇居住区"},
+  {"city": "shanghai",     "lat": 31.2304, "lng": 121.4737, "area_type": "commercial",    "label": "Shanghai · Nanjing Road/Bund"},
+  {"city": "shanghai",     "lat": 31.2397, "lng": 121.4997, "area_type": "commercial",    "label": "Shanghai · Lujiazui"},
+  {"city": "shanghai",     "lat": 31.2090, "lng": 121.4488, "area_type": "residential",   "label": "Shanghai · French Concession"},
+  {"city": "shanghai",     "lat": 31.1979, "lng": 121.3362, "area_type": "transport_hub",  "label": "Shanghai · Hongqiao Station"},
 
-  {"city": "guangzhou","lat": 23.1291, "lng": 113.2644, "area_type": "commercial",     "label": "广州·天河城商圈"},
-  {"city": "guangzhou","lat": 23.1066, "lng": 113.3242, "area_type": "tourist",        "label": "广州·广州塔/珠江"},
-  {"city": "guangzhou","lat": 23.0939, "lng": 113.3466, "area_type": "university",     "label": "广州·中山大学"},
-  {"city": "guangzhou","lat": 23.0021, "lng": 113.0642, "area_type": "transport_hub",   "label": "广州·广州南站"},
-  {"city": "guangzhou","lat": 23.1261, "lng": 113.2310, "area_type": "residential",     "label": "广州·荔湾西关"},
+  {"city": "guangzhou",    "lat": 23.1291, "lng": 113.2644, "area_type": "commercial",    "label": "Guangzhou · Tianhe"},
+  {"city": "guangzhou",    "lat": 23.1066, "lng": 113.3242, "area_type": "tourist",       "label": "Guangzhou · Canton Tower"},
 
-  {"city": "hangzhou", "lat": 30.2489, "lng": 120.1500, "area_type": "commercial",     "label": "杭州·武林商圈"},
-  {"city": "hangzhou", "lat": 30.2422, "lng": 120.1489, "area_type": "tourist",        "label": "杭州·西湖景区"},
-  {"city": "hangzhou", "lat": 30.2633, "lng": 120.1217, "area_type": "university",     "label": "杭州·浙江大学"},
-  {"city": "hangzhou", "lat": 30.3020, "lng": 120.0860, "area_type": "transport_hub",   "label": "杭州·杭州东站"},
-  {"city": "hangzhou", "lat": 30.2780, "lng": 120.0030, "area_type": "residential",     "label": "杭州·城西银泰"},
+  {"city": "shenzhen",     "lat": 22.5431, "lng": 114.0579, "area_type": "commercial",    "label": "Shenzhen · Futian CBD"},
+  {"city": "shenzhen",     "lat": 22.5352, "lng": 113.9453, "area_type": "commercial",    "label": "Shenzhen · Nanshan/Shekou"},
 
-  {"city": "chengdu",  "lat": 30.5728, "lng": 104.0668, "area_type": "commercial",     "label": "成都·春熙路/太古里"},
-  {"city": "chengdu",  "lat": 30.6322, "lng": 104.0594, "area_type": "tourist",        "label": "成都·大熊猫基地"},
-  {"city": "chengdu",  "lat": 30.6320, "lng": 104.0830, "area_type": "university",     "label": "成都·四川大学"},
-  {"city": "chengdu",  "lat": 30.6112, "lng": 104.1378, "area_type": "transport_hub",   "label": "成都·成都东站"},
-  {"city": "chengdu",  "lat": 30.5450, "lng": 104.0650, "area_type": "residential",     "label": "成都·武侯居住区"}
+  {"city": "hangzhou",     "lat": 30.2422, "lng": 120.1489, "area_type": "tourist",       "label": "Hangzhou · West Lake"},
+  {"city": "hangzhou",     "lat": 30.2795, "lng": 120.0194, "area_type": "commercial",    "label": "Hangzhou · Xixi Wetland area"},
+
+  {"city": "chengdu",      "lat": 30.5728, "lng": 104.0668, "area_type": "commercial",    "label": "Chengdu · Chunxi Road"},
+  {"city": "chengdu",      "lat": 30.6322, "lng": 104.0594, "area_type": "tourist",       "label": "Chengdu · Panda Base"},
+
+  {"city": "chongqing",    "lat": 29.5630, "lng": 106.5516, "area_type": "commercial",    "label": "Chongqing · Jiefangbei"},
+  {"city": "chongqing",    "lat": 29.5810, "lng": 106.5836, "area_type": "tourist",       "label": "Chongqing · Hongya Cave"},
+
+  {"city": "xian",         "lat": 34.2658, "lng": 108.9541, "area_type": "tourist",       "label": "Xi'an · Bell Tower"},
+  {"city": "xian",         "lat": 34.3843, "lng": 109.2786, "area_type": "tourist",       "label": "Xi'an · Terracotta Warriors"},
+
+  {"city": "hong_kong",    "lat": 22.2796, "lng": 114.1735, "area_type": "commercial",    "label": "Hong Kong · Central"},
+  {"city": "hong_kong",    "lat": 22.2988, "lng": 114.1722, "area_type": "commercial",    "label": "Hong Kong · Tsim Sha Tsui"},
+  {"city": "hong_kong",    "lat": 22.3193, "lng": 114.1694, "area_type": "commercial",    "label": "Hong Kong · Mong Kok"},
+
+  {"city": "taipei",       "lat": 25.0330, "lng": 121.5654, "area_type": "commercial",    "label": "Taipei · Xinyi/Taipei 101"},
+  {"city": "taipei",       "lat": 25.0478, "lng": 121.5170, "area_type": "tourist",       "label": "Taipei · Ximending"},
+
+  {"city": "tokyo",        "lat": 35.6762, "lng": 139.6503, "area_type": "commercial",    "label": "Tokyo · Shibuya Crossing"},
+  {"city": "tokyo",        "lat": 35.7148, "lng": 139.7967, "area_type": "tourist",       "label": "Tokyo · Asakusa/Sensoji"},
+  {"city": "tokyo",        "lat": 35.6812, "lng": 139.7671, "area_type": "transport_hub",  "label": "Tokyo · Tokyo Station"},
+  {"city": "tokyo",        "lat": 35.6938, "lng": 139.7034, "area_type": "commercial",    "label": "Tokyo · Shinjuku"},
+  {"city": "tokyo",        "lat": 35.6595, "lng": 139.7006, "area_type": "residential",   "label": "Tokyo · Ebisu"},
+
+  {"city": "osaka",        "lat": 34.6687, "lng": 135.5031, "area_type": "commercial",    "label": "Osaka · Dotonbori"},
+  {"city": "osaka",        "lat": 34.6937, "lng": 135.5023, "area_type": "tourist",       "label": "Osaka · Osaka Castle"},
+
+  {"city": "kyoto",        "lat": 35.0039, "lng": 135.7686, "area_type": "tourist",       "label": "Kyoto · Fushimi Inari"},
+  {"city": "kyoto",        "lat": 35.0116, "lng": 135.7681, "area_type": "tourist",       "label": "Kyoto · Gion"},
+
+  {"city": "seoul",        "lat": 37.5665, "lng": 126.9780, "area_type": "tourist",       "label": "Seoul · Gyeongbokgung"},
+  {"city": "seoul",        "lat": 37.5547, "lng": 126.9707, "area_type": "commercial",    "label": "Seoul · Myeongdong"},
+  {"city": "seoul",        "lat": 37.5133, "lng": 127.1003, "area_type": "commercial",    "label": "Seoul · Gangnam/COEX"},
+  {"city": "seoul",        "lat": 37.5568, "lng": 126.9239, "area_type": "residential",   "label": "Seoul · Hongdae"},
+
+  {"city": "bangkok",      "lat": 13.7516, "lng": 100.4943, "area_type": "tourist",       "label": "Bangkok · Grand Palace"},
+  {"city": "bangkok",      "lat": 13.7469, "lng": 100.5349, "area_type": "commercial",    "label": "Bangkok · Siam Square"},
+  {"city": "bangkok",      "lat": 13.7225, "lng": 100.5291, "area_type": "commercial",    "label": "Bangkok · Silom"},
+
+  {"city": "singapore",    "lat": 1.2834,  "lng": 103.8607, "area_type": "tourist",       "label": "Singapore · Marina Bay Sands"},
+  {"city": "singapore",    "lat": 1.2838,  "lng": 103.8446, "area_type": "commercial",    "label": "Singapore · Orchard Road"},
+  {"city": "singapore",    "lat": 1.2812,  "lng": 103.8451, "area_type": "tourist",       "label": "Singapore · Chinatown"},
+
+  {"city": "kuala_lumpur", "lat": 3.1579,  "lng": 101.7116, "area_type": "tourist",       "label": "Kuala Lumpur · Petronas Towers"},
+  {"city": "kuala_lumpur", "lat": 3.1466,  "lng": 101.7105, "area_type": "commercial",    "label": "Kuala Lumpur · Bukit Bintang"},
+
+  {"city": "mumbai",       "lat": 18.9220, "lng": 72.8347,  "area_type": "tourist",       "label": "Mumbai · Gateway of India"},
+  {"city": "mumbai",       "lat": 19.0760, "lng": 72.8777,  "area_type": "commercial",    "label": "Mumbai · Bandra-Kurla"},
+
+  {"city": "delhi",        "lat": 28.6562, "lng": 77.2410,  "area_type": "tourist",       "label": "Delhi · Red Fort"},
+  {"city": "delhi",        "lat": 28.6129, "lng": 77.2295,  "area_type": "commercial",    "label": "Delhi · Connaught Place"},
+
+  {"city": "dubai",        "lat": 25.1972, "lng": 55.2744,  "area_type": "tourist",       "label": "Dubai · Burj Khalifa"},
+  {"city": "dubai",        "lat": 25.2048, "lng": 55.2708,  "area_type": "commercial",    "label": "Dubai · Dubai Mall"},
+  {"city": "dubai",        "lat": 25.0762, "lng": 55.1341,  "area_type": "tourist",       "label": "Dubai · Palm Jumeirah"},
+
+  {"city": "istanbul",     "lat": 41.0082, "lng": 28.9784,  "area_type": "tourist",       "label": "Istanbul · Hagia Sophia"},
+  {"city": "istanbul",     "lat": 41.0136, "lng": 28.9550,  "area_type": "commercial",    "label": "Istanbul · Grand Bazaar"},
+  {"city": "istanbul",     "lat": 41.0351, "lng": 28.9850,  "area_type": "commercial",    "label": "Istanbul · Taksim/Istiklal"},
+
+  {"city": "london",       "lat": 51.5014, "lng": -0.1419,  "area_type": "tourist",       "label": "London · Westminster/Big Ben"},
+  {"city": "london",       "lat": 51.5074, "lng": -0.0901,  "area_type": "tourist",       "label": "London · Tower Bridge"},
+  {"city": "london",       "lat": 51.5155, "lng": -0.1414,  "area_type": "commercial",    "label": "London · Oxford Street"},
+  {"city": "london",       "lat": 51.5311, "lng": -0.1244,  "area_type": "transport_hub",  "label": "London · King's Cross"},
+  {"city": "london",       "lat": 51.5099, "lng": -0.1181,  "area_type": "commercial",    "label": "London · Covent Garden"},
+
+  {"city": "paris",        "lat": 48.8584, "lng": 2.2945,   "area_type": "tourist",       "label": "Paris · Eiffel Tower"},
+  {"city": "paris",        "lat": 48.8606, "lng": 2.3376,   "area_type": "tourist",       "label": "Paris · Louvre"},
+  {"city": "paris",        "lat": 48.8530, "lng": 2.3499,   "area_type": "tourist",       "label": "Paris · Notre-Dame"},
+  {"city": "paris",        "lat": 48.8738, "lng": 2.2950,   "area_type": "commercial",    "label": "Paris · Champs-Élysées"},
+  {"city": "paris",        "lat": 48.8844, "lng": 2.3430,   "area_type": "transport_hub",  "label": "Paris · Gare du Nord"},
+
+  {"city": "rome",         "lat": 41.8902, "lng": 12.4922,  "area_type": "tourist",       "label": "Rome · Colosseum"},
+  {"city": "rome",         "lat": 41.9029, "lng": 12.4534,  "area_type": "tourist",       "label": "Rome · Vatican/St Peter's"},
+  {"city": "rome",         "lat": 41.9009, "lng": 12.4833,  "area_type": "tourist",       "label": "Rome · Trevi Fountain"},
+  {"city": "rome",         "lat": 41.8955, "lng": 12.4823,  "area_type": "commercial",    "label": "Rome · Via del Corso"},
+
+  {"city": "barcelona",    "lat": 41.4036, "lng": 2.1744,   "area_type": "tourist",       "label": "Barcelona · Sagrada Familia"},
+  {"city": "barcelona",    "lat": 41.3818, "lng": 2.1685,   "area_type": "commercial",    "label": "Barcelona · Las Ramblas"},
+  {"city": "barcelona",    "lat": 41.3916, "lng": 2.1650,   "area_type": "commercial",    "label": "Barcelona · Passeig de Gràcia"},
+
+  {"city": "madrid",       "lat": 40.4168, "lng": -3.7038,  "area_type": "commercial",    "label": "Madrid · Puerta del Sol"},
+  {"city": "madrid",       "lat": 40.4530, "lng": -3.6883,  "area_type": "tourist",       "label": "Madrid · Santiago Bernabéu"},
+
+  {"city": "amsterdam",    "lat": 52.3676, "lng": 4.9041,   "area_type": "tourist",       "label": "Amsterdam · Dam Square"},
+  {"city": "amsterdam",    "lat": 52.3600, "lng": 4.8852,   "area_type": "tourist",       "label": "Amsterdam · Rijksmuseum"},
+
+  {"city": "berlin",       "lat": 52.5163, "lng": 13.3777,  "area_type": "tourist",       "label": "Berlin · Brandenburg Gate"},
+  {"city": "berlin",       "lat": 52.5200, "lng": 13.4050,  "area_type": "commercial",    "label": "Berlin · Alexanderplatz"},
+  {"city": "berlin",       "lat": 52.5075, "lng": 13.3903,  "area_type": "tourist",       "label": "Berlin · Checkpoint Charlie"},
+
+  {"city": "munich",       "lat": 48.1374, "lng": 11.5755,  "area_type": "tourist",       "label": "Munich · Marienplatz"},
+  {"city": "munich",       "lat": 48.1457, "lng": 11.5819,  "area_type": "commercial",    "label": "Munich · Maximilianstraße"},
+
+  {"city": "vienna",       "lat": 48.2065, "lng": 16.3659,  "area_type": "tourist",       "label": "Vienna · St Stephen's Cathedral"},
+  {"city": "vienna",       "lat": 48.2034, "lng": 16.3695,  "area_type": "commercial",    "label": "Vienna · Kärntner Straße"},
+
+  {"city": "prague",       "lat": 50.0865, "lng": 14.4114,  "area_type": "tourist",       "label": "Prague · Old Town Square"},
+  {"city": "prague",       "lat": 50.0886, "lng": 14.4208,  "area_type": "tourist",       "label": "Prague · Charles Bridge"},
+
+  {"city": "zurich",       "lat": 47.3769, "lng": 8.5417,   "area_type": "commercial",    "label": "Zurich · Bahnhofstrasse"},
+
+  {"city": "moscow",       "lat": 55.7539, "lng": 37.6208,  "area_type": "tourist",       "label": "Moscow · Red Square"},
+  {"city": "moscow",       "lat": 55.7601, "lng": 37.6186,  "area_type": "commercial",    "label": "Moscow · Tverskaya Street"},
+
+  {"city": "new_york",     "lat": 40.7580, "lng": -73.9855, "area_type": "commercial",    "label": "New York · Times Square"},
+  {"city": "new_york",     "lat": 40.7484, "lng": -73.9857, "area_type": "tourist",       "label": "New York · Empire State"},
+  {"city": "new_york",     "lat": 40.7614, "lng": -73.9776, "area_type": "tourist",       "label": "New York · Central Park South"},
+  {"city": "new_york",     "lat": 40.7527, "lng": -73.9772, "area_type": "transport_hub",  "label": "New York · Grand Central"},
+  {"city": "new_york",     "lat": 40.7061, "lng": -74.0087, "area_type": "commercial",    "label": "New York · Wall Street"},
+
+  {"city": "los_angeles",  "lat": 34.1014, "lng": -118.3267, "area_type": "tourist",      "label": "Los Angeles · Hollywood Blvd"},
+  {"city": "los_angeles",  "lat": 34.0195, "lng": -118.4912, "area_type": "tourist",      "label": "Los Angeles · Santa Monica Pier"},
+  {"city": "los_angeles",  "lat": 34.0522, "lng": -118.2437, "area_type": "commercial",   "label": "Los Angeles · Downtown"},
+
+  {"city": "san_francisco","lat": 37.8080, "lng": -122.4177, "area_type": "tourist",      "label": "San Francisco · Golden Gate View"},
+  {"city": "san_francisco","lat": 37.7749, "lng": -122.4194, "area_type": "commercial",   "label": "San Francisco · Union Square"},
+  {"city": "san_francisco","lat": 37.7955, "lng": -122.3937, "area_type": "commercial",   "label": "San Francisco · Embarcadero"},
+
+  {"city": "chicago",      "lat": 41.8827, "lng": -87.6233, "area_type": "tourist",       "label": "Chicago · Millennium Park"},
+  {"city": "chicago",      "lat": 41.8789, "lng": -87.6359, "area_type": "commercial",    "label": "Chicago · The Loop"},
+
+  {"city": "washington_dc","lat": 38.8893, "lng": -77.0502, "area_type": "tourist",       "label": "Washington DC · National Mall"},
+  {"city": "washington_dc","lat": 38.8977, "lng": -77.0365, "area_type": "tourist",       "label": "Washington DC · White House"},
+
+  {"city": "toronto",      "lat": 43.6426, "lng": -79.3871, "area_type": "tourist",       "label": "Toronto · CN Tower"},
+  {"city": "toronto",      "lat": 43.6532, "lng": -79.3832, "area_type": "commercial",    "label": "Toronto · Yonge-Dundas"},
+
+  {"city": "vancouver",    "lat": 49.2827, "lng": -123.1207, "area_type": "commercial",   "label": "Vancouver · Downtown"},
+  {"city": "vancouver",    "lat": 49.2719, "lng": -123.1036, "area_type": "tourist",      "label": "Vancouver · Science World"},
+
+  {"city": "mexico_city",  "lat": 19.4326, "lng": -99.1332, "area_type": "tourist",       "label": "Mexico City · Zócalo"},
+  {"city": "mexico_city",  "lat": 19.4270, "lng": -99.1677, "area_type": "commercial",    "label": "Mexico City · Condesa/Roma"},
+
+  {"city": "sao_paulo",    "lat": -23.5616, "lng": -46.6556, "area_type": "commercial",   "label": "São Paulo · Paulista Avenue"},
+  {"city": "sao_paulo",    "lat": -23.5505, "lng": -46.6333, "area_type": "commercial",   "label": "São Paulo · Sé/Centro"},
+
+  {"city": "buenos_aires", "lat": -34.6083, "lng": -58.3712, "area_type": "tourist",      "label": "Buenos Aires · Plaza de Mayo"},
+  {"city": "buenos_aires", "lat": -34.5889, "lng": -58.3960, "area_type": "commercial",   "label": "Buenos Aires · Palermo Soho"},
+
+  {"city": "rio",          "lat": -22.9519, "lng": -43.2105, "area_type": "tourist",      "label": "Rio · Copacabana Beach"},
+  {"city": "rio",          "lat": -22.9068, "lng": -43.1729, "area_type": "tourist",      "label": "Rio · Christ the Redeemer area"},
+
+  {"city": "lima",         "lat": -12.0464, "lng": -77.0428, "area_type": "tourist",      "label": "Lima · Miraflores"},
+
+  {"city": "bogota",       "lat": 4.5981,  "lng": -74.0758, "area_type": "tourist",       "label": "Bogotá · La Candelaria"},
+
+  {"city": "sydney",       "lat": -33.8568, "lng": 151.2153, "area_type": "tourist",      "label": "Sydney · Opera House"},
+  {"city": "sydney",       "lat": -33.8688, "lng": 151.2093, "area_type": "commercial",   "label": "Sydney · CBD/Pitt Street"},
+  {"city": "sydney",       "lat": -33.8568, "lng": 151.2513, "area_type": "tourist",      "label": "Sydney · Bondi Beach"},
+
+  {"city": "melbourne",    "lat": -37.8136, "lng": 144.9631, "area_type": "commercial",   "label": "Melbourne · Federation Square"},
+  {"city": "melbourne",    "lat": -37.8183, "lng": 144.9671, "area_type": "commercial",   "label": "Melbourne · Flinders Lane"},
+
+  {"city": "auckland",     "lat": -36.8485, "lng": 174.7633, "area_type": "commercial",   "label": "Auckland · Queen Street"},
+
+  {"city": "cape_town",    "lat": -33.9249, "lng": 18.4241,  "area_type": "tourist",      "label": "Cape Town · V&A Waterfront"},
+  {"city": "cape_town",    "lat": -33.9628, "lng": 18.4098,  "area_type": "tourist",      "label": "Cape Town · Table Mountain"},
+
+  {"city": "nairobi",      "lat": -1.2921,  "lng": 36.8219,  "area_type": "commercial",   "label": "Nairobi · CBD"},
+
+  {"city": "cairo",        "lat": 29.9773,  "lng": 31.1325,  "area_type": "tourist",      "label": "Cairo · Pyramids of Giza"},
+  {"city": "cairo",        "lat": 30.0444,  "lng": 31.2357,  "area_type": "commercial",   "label": "Cairo · Tahrir Square"},
+
+  {"city": "marrakech",    "lat": 31.6295,  "lng": -7.9811,  "area_type": "tourist",      "label": "Marrakech · Jemaa el-Fnaa"},
+
+  {"city": "athens",       "lat": 37.9715,  "lng": 23.7267,  "area_type": "tourist",      "label": "Athens · Acropolis"},
+  {"city": "athens",       "lat": 37.9755,  "lng": 23.7348,  "area_type": "commercial",   "label": "Athens · Plaka"},
+
+  {"city": "lisbon",       "lat": 38.7139,  "lng": -9.1395,  "area_type": "tourist",      "label": "Lisbon · Belém Tower area"},
+  {"city": "lisbon",       "lat": 38.7103,  "lng": -9.1367,  "area_type": "commercial",   "label": "Lisbon · Baixa/Rossio"},
+
+  {"city": "budapest",     "lat": 47.4979,  "lng": 19.0402,  "area_type": "tourist",      "label": "Budapest · Fisherman's Bastion"},
+  {"city": "budapest",     "lat": 47.4984,  "lng": 19.0408,  "area_type": "commercial",   "label": "Budapest · Váci utca"},
+
+  {"city": "stockholm",    "lat": 59.3293,  "lng": 18.0686,  "area_type": "tourist",      "label": "Stockholm · Gamla Stan"},
+
+  {"city": "copenhagen",   "lat": 55.6747,  "lng": 12.5713,  "area_type": "commercial",   "label": "Copenhagen · Strøget"},
+  {"city": "copenhagen",   "lat": 55.6928,  "lng": 12.5997,  "area_type": "tourist",      "label": "Copenhagen · Little Mermaid"},
+
+  {"city": "helsinki",     "lat": 60.1699,  "lng": 24.9384,  "area_type": "commercial",   "label": "Helsinki · Senate Square"},
+
+  {"city": "warsaw",       "lat": 52.2319,  "lng": 21.0067,  "area_type": "tourist",      "label": "Warsaw · Old Town"},
+
+  {"city": "johannesburg", "lat": -26.2041, "lng": 28.0473,  "area_type": "commercial",   "label": "Johannesburg · Sandton"},
+
+  {"city": "lagos",        "lat": 6.4541,   "lng": 3.3947,   "area_type": "commercial",   "label": "Lagos · Victoria Island"},
+
+  {"city": "hanoi",        "lat": 21.0285,  "lng": 105.8542, "area_type": "tourist",      "label": "Hanoi · Old Quarter"},
+  {"city": "hanoi",        "lat": 21.0378,  "lng": 105.8340, "area_type": "tourist",      "label": "Hanoi · Ho Chi Minh Mausoleum"},
+
+  {"city": "ho_chi_minh",  "lat": 10.7769,  "lng": 106.7009, "area_type": "tourist",      "label": "Ho Chi Minh · Notre-Dame Cathedral"},
+
+  {"city": "jakarta",      "lat": -6.1751,  "lng": 106.8650, "area_type": "tourist",      "label": "Jakarta · National Monument"},
+
+  {"city": "manila",       "lat": 14.5895,  "lng": 120.9795, "area_type": "tourist",      "label": "Manila · Intramuros"},
+
+  {"city": "kathmandu",    "lat": 27.7172,  "lng": 85.3240,  "area_type": "tourist",      "label": "Kathmandu · Durbar Square"},
+
+  {"city": "havana",       "lat": 23.1365,  "lng": -82.3590, "area_type": "tourist",      "label": "Havana · Old Havana"},
+
+  {"city": "reykjavik",    "lat": 64.1466,  "lng": -21.9426, "area_type": "tourist",      "label": "Reykjavik · Hallgrímskirkja"},
+
+  {"city": "edinburgh",    "lat": 55.9533,  "lng": -3.1883,  "area_type": "tourist",      "label": "Edinburgh · Royal Mile"},
+
+  {"city": "dublin",       "lat": 53.3498,  "lng": -6.2603,  "area_type": "commercial",   "label": "Dublin · Temple Bar"},
+
+  {"city": "osaka_namba",  "lat": 34.6659,  "lng": 135.5013, "area_type": "commercial",   "label": "Osaka · Namba/Shinsaibashi"}
 ]

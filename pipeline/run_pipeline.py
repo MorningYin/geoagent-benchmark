@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GeoAgentBench Pipeline v3 — orchestrator script.
+"""GeoAgentBench Pipeline v4 — orchestrator script.
 
 Usage:
     python run_pipeline.py                        # run all modules 1-6 (Google Maps source)
@@ -28,11 +28,11 @@ IMAGE_SOURCES = {
 }
 
 MODULES_2_TO_6 = [
-    (2, "Vision Parser",    "modules.module_2_vision_parser"),
-    (3, "Task Builder",     "modules.module_3_task_builder"),
-    (4, "Quality Gate",     "modules.module_4_quality_gate"),
-    (5, "Query Writer",     "modules.module_5_query_writer"),
-    (6, "Review Exporter",  "modules.module_6_review_exporter"),
+    (2, "Scene Describer",       "modules.module_2_vision_parser"),
+    (3, "Task Creator",          "modules.module_3_task_builder"),
+    (4, "Quality Judge",         "modules.module_4_quality_gate"),
+    (5, "Ground Truth Anchor",   "modules.module_5_ground_truth"),
+    (6, "Exporter",              "modules.module_6_review_exporter"),
 ]
 
 
@@ -43,12 +43,22 @@ def run(start_from: int = 1, config_path: str | None = None,
     module_1 = IMAGE_SOURCES[source]
     modules = [module_1] + MODULES_2_TO_6
 
+    # Print stage model configuration
+    stage_models = config.all_stage_models()
+    active_stages = ["vision_parse", "task_create", "task_judge"]
+
     print("=" * 80)
-    print("GeoAgentBench Pipeline v3")
+    print("GeoAgentBench Pipeline v4")
     print(f"  Image source:  {source}")
-    print(f"  Vision model:  {config.model_vision}")
-    print(f"  Text model:    {config.model_text}")
-    print(f"  Strong model:  {config.model_text_strong}")
+    print(f"  Model config:")
+    for stage in active_stages:
+        endpoint = stage_models.get(stage, "?")
+        try:
+            ep_config = config.model_endpoint(endpoint)
+            model_name = ep_config.get("model", "?")
+        except KeyError:
+            model_name = "?"
+        print(f"    {stage:20s} → {endpoint} ({model_name})")
     print(f"  Start from:    module {start_from}")
     if seed_limit:
         print(f"  Seed limit:    {seed_limit}")
@@ -80,12 +90,12 @@ def run(start_from: int = 1, config_path: str | None = None,
         print(f"\n[Done] Module {num}: {name} ({elapsed:.1f}s)")
 
     print(f"\n{'='*80}")
-    print("Pipeline v3 complete!")
+    print("Pipeline v4 complete!")
     print(f"{'='*80}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="GeoAgentBench Pipeline v3")
+    parser = argparse.ArgumentParser(description="GeoAgentBench Pipeline v4")
     parser.add_argument("--start-from", type=int, default=1,
                         help="Start from module N (1-6)")
     parser.add_argument("--config", type=str, default=None,

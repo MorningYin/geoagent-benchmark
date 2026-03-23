@@ -35,10 +35,14 @@ from typing import Any, Dict, List, Optional
 
 # ── Stage name constants ────────────────────────────────────────────────────
 STAGE_VISION_PARSE  = "vision_parse"   # Module 2
-STAGE_TASK_DESIGN   = "task_design"    # Module 3
-STAGE_QUALITY_LLM   = "quality_llm"   # Module 4
-STAGE_QUERY_REWRITE = "query_rewrite"  # Module 5
-STAGE_QUERY_VERIFY  = "query_verify"   # Module 5
+STAGE_TASK_DESIGN   = "task_design"    # Module 3  (v3 legacy)
+STAGE_QUALITY_LLM   = "quality_llm"   # Module 4  (v3 legacy)
+STAGE_QUERY_REWRITE = "query_rewrite"  # Module 5  (v3 legacy)
+STAGE_QUERY_VERIFY  = "query_verify"   # Module 5  (v3 legacy)
+
+# ── v4 stage constants ─────────────────────────────────────────────────────
+STAGE_TASK_CREATE   = "task_create"    # Module 3  v4 — creative task generation
+STAGE_TASK_JUDGE    = "task_judge"     # Module 4  v4 — LLM-as-Judge
 
 
 # ── JSON extraction helper ──────────────────────────────────────────────────
@@ -47,14 +51,17 @@ def _extract_json(raw: str) -> Dict[str, Any]:
     """Robustly extract a JSON object from an LLM text response.
 
     Handles: pure JSON, ```json ... ``` blocks, leading/trailing prose,
-    and single-line inline JSON.
+    nested braces, and common LLM formatting quirks.
     """
     raw = raw.strip()
 
-    # 1. Strip markdown code fence
-    fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw)
+    # 1. Strip markdown code fence (greedy — take the largest block)
+    fence = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", raw)
     if fence:
-        return json.loads(fence.group(1))
+        try:
+            return json.loads(fence.group(1))
+        except json.JSONDecodeError:
+            pass
 
     # 2. Try parsing the whole response directly
     try:
@@ -62,12 +69,49 @@ def _extract_json(raw: str) -> Dict[str, Any]:
     except json.JSONDecodeError:
         pass
 
-    # 3. Find the first {...} block (handles leading/trailing prose)
+    # 3. Find the outermost {...} block using brace counting
+    start = raw.find("{")
+    if start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        end = start
+        for i in range(start, len(raw)):
+            c = raw[i]
+            if escape:
+                escape = False
+                continue
+            if c == "\\":
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if depth == 0:
+            candidate = raw[start:end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+    # 4. Last resort: greedy regex match
     match = re.search(r"\{[\s\S]*\}", raw)
     if match:
-        return json.loads(match.group(0))
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
 
-    raise ValueError(f"No JSON object found in LLM response:\n{raw[:300]}")
+    raise ValueError(f"No JSON object found in LLM response:\n{raw[:500]}")
 
 
 # ── Abstract base ────────────────────────────────────────────────────────────
@@ -213,7 +257,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         messages: List[Dict[str, str]],
         *,
         temperature: float = 0.7,
-        max_tokens: int = 2048,
+        max_tokens: int = 16384,
     ) -> str:
         client = self._ensure()
         resp = client.chat.completions.create(
@@ -238,11 +282,13 @@ class OpenAICompatibleClient(BaseLLMClient):
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=temperature,
+                max_tokens=8192,
             )
-            return json.loads(resp.choices[0].message.content)
+            raw = resp.choices[0].message.content
+            return _extract_json(raw)
         except Exception:
             # Some relay stations / older endpoints don't support json_object mode
-            raw = self.text_completion(messages, temperature=temperature)
+            raw = self.text_completion(messages, temperature=temperature, max_tokens=8192)
             return _extract_json(raw)
 
     def vision_json_completion(

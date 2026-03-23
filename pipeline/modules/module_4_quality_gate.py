@@ -1,9 +1,14 @@
-"""Module 4: Quality Gate — four-layer quality check.
+"""Module 4: Quality Judge — LLM-as-Judge multi-dimensional quality review.
 
-Layer 1: Programmatic rules (CoherenceEngine)
-Layer 2: Image necessity check (information_gap_plan validity)
-Layer 3: Image contribution check (image_utility_class vs task_type alignment)
-Layer 4: LLM plausibility review
+Pipeline v4: replaces v3's 4-layer programmatic quality gate with a single
+LLM judge call that scores tasks across 5 dimensions and calibrates coordinates.
+
+Judge dimensions:
+  1. Realism        — would a real user ask this?
+  2. Image necessity — is the image essential or decorative?
+  3. Behavior chain — is the reasoning/API chain logical?
+  4. Verifiability  — are the must_pass checks concrete?
+  5. Coordinate accuracy — do self-labeled coordinates match?
 """
 
 from __future__ import annotations
@@ -13,197 +18,214 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from shared.config import PipelineConfig
-from shared.llm_client import BaseLLMClient, ClientFactory, STAGE_QUALITY_LLM
-from shared.schema_loader import SchemaLoader
-from shared.coherence import ClassificationEngine, CoherenceEngine
-from shared.plausibility import PlausibilityChecker
+from shared.llm_client import ClientFactory, STAGE_TASK_JUDGE
 from shared.jsonl_io import read_jsonl, write_jsonl, append_error
 
-DATA_IN = Path(__file__).resolve().parent.parent / "data" / "03_tasks"
-DATA_OUT = Path(__file__).resolve().parent.parent / "data" / "04_quality"
+PIPELINE_ROOT = Path(__file__).resolve().parent.parent
+DATA_IN = PIPELINE_ROOT / "data" / "03_tasks"
+DATA_OUT = PIPELINE_ROOT / "data" / "04_judged"
 TASKS_PATH = DATA_IN / "tasks.jsonl"
-QUALITY_PATH = DATA_OUT / "quality.jsonl"
+APPROVED_PATH = DATA_OUT / "approved.jsonl"
 REJECTED_PATH = DATA_OUT / "rejected.jsonl"
 ERRORS_PATH = DATA_OUT / "errors.jsonl"
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.json"
 
 
-def _check_image_necessity(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Layer 2: Check that the information_gap_plan makes the image actually necessary."""
-    info_gap = task.get("information_gap_plan", {})
-    image_provides = info_gap.get("image_provides", [])
-    query_must_state = info_gap.get("query_must_state", [])
+JUDGE_PROMPT_TEMPLATE = """\
+你是一个严格的地理 Agent 基准测试审稿人。请认真评审以下任务样本，尽量找出问题。
 
-    issues = []
+## 待评审任务
 
-    if not image_provides:
-        issues.append("image_provides is empty — image adds no information")
+%s
 
-    if len(image_provides) < 2:
-        issues.append("image provides too little unique info (< 2 items)")
+## 原始图像描述
 
-    if not query_must_state:
-        issues.append("query_must_state is empty — task might be trivially solvable without any query")
+%s
 
-    return {
-        "passed": len(issues) == 0,
-        "issues": issues,
+## 评审维度（每项 1-5 分）
+
+1. **场景自然度 (realism)**: 真实用户会在这种情况下提出这种需求吗？
+   - 1-2: 场景生硬、刻意、不自然
+   - 3: 可能但不太常见
+   - 4-5: 非常自然，生活中常见
+
+2. **图像必要性 (image_necessity)**: 去掉图像，Agent 还能完成任务吗？
+   - 1: 图像完全是摆设，不影响解题
+   - 2: 去掉图只是稍微变难
+   - 3: 去掉图明显变难
+   - 4-5: 去掉图根本无法完成任务
+
+3. **行为链合理性 (behavior_chain)**: Agent 的推理步骤和 API 调用逻辑通顺吗？
+   - 有没有跳步、多余步骤、或技术上不可能的操作？
+   - API 调用的参数合理吗？
+
+4. **可验证性 (verifiability)**: must_pass 里的检查条件够具体吗？
+   - 每条能客观判断对错吗？还是太模糊（如"做得好"）？
+
+5. **坐标准确性 (coordinate_accuracy)**: task_type / complexity / image_role 标注准确吗？
+   - 任务实际复杂度和标注的 complexity 匹配吗？
+   - 图像在任务中的实际角色和标注的 image_role 匹配吗？
+
+## 输出格式（严格 JSON）
+
+{"scores": {"realism": N, "image_necessity": N, "behavior_chain": N, "verifiability": N, "coordinate_accuracy": N}, "overall_pass": true/false, "corrected_coordinates": {"task_type": "...", "complexity": "...", "image_role": "..."}, "rejection_reason": "..." 或 null, "review_priority": "low|medium|high", "suggestions": "..."}
+
+## 判断标准
+
+- 所有分 >= 3 → overall_pass = true
+- 任一分 <= 1 → overall_pass = false
+- 有分为 2 → overall_pass = true，但 review_priority = "high"
+- 如果坐标标注不准确，在 corrected_coordinates 给出你认为正确的值
+
+## 长度要求
+suggestions 字段请控制在 100 字以内，只列出最关键的 1-2 个问题，不要逐条展开分析。"""
+
+
+def _build_judge_input(task: Dict[str, Any]) -> str:
+    """Build the judge prompt with task context."""
+    task_for_judge = {
+        "coordinates": task.get("coordinates", {}),
+        "scenario": task.get("scenario", {}),
+        "expected_behavior": task.get("expected_behavior", {}),
+        "verification": task.get("verification", {}),
+        "coordinate_reasoning": task.get("coordinate_reasoning", ""),
     }
 
+    scene_desc = task.get("provenance", {}).get("scene_description", "（无描述）")
+    task_json_str = json.dumps(task_for_judge, ensure_ascii=False, indent=2)
 
-def _check_image_contribution(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Layer 3: Verify image actually contributes to the task per its utility class."""
-    task_type = task.get("task_type", "")
-    utility_class = task.get("image_utility_class", "context")
-    info_gap = task.get("information_gap_plan", {})
-    image_provides = info_gap.get("image_provides", [])
-    issues = []
-
-    # place_lookup / geocode_resolution: image MUST be anchor
-    if task_type in ("place_lookup", "geocode_resolution"):
-        if utility_class != "anchor":
-            issues.append(f"{task_type} requires anchor image, got {utility_class}")
-        if "primary_location_clue" not in image_provides and "visible_text_clues" not in image_provides:
-            issues.append(f"{task_type} but image provides no text clues or location clue")
-
-    # place_filter_rank / place_discovery: image should provide meaningful info
-    if task_type in ("place_filter_rank", "place_discovery"):
-        useful_signals = {"approximate_location", "visible_text_clues",
-                          "primary_location_clue", "city_level_location"}
-        has_useful = any(
-            any(sig in p for sig in useful_signals)
-            for p in image_provides
-        )
-        if not has_useful and len(image_provides) <= 1:
-            issues.append("Image provides only environmental_context or scene_type — "
-                          "minimal contribution to POI-based task")
-
-    return {"passed": len(issues) == 0, "issues": issues}
+    return JUDGE_PROMPT_TEMPLATE % (task_json_str, scene_desc)
 
 
-def _llm_plausibility_check(task: Dict[str, Any], llm: BaseLLMClient) -> Dict[str, Any]:
-    """Layer 3: LLM checks overall task plausibility."""
-    prompt = {
-        "task_type": task.get("task_type"),
-        "global_context": task.get("global_context"),
-        "task_dimensions_summary": {k: v for k, v in task.get("task_dimensions", {}).items() if v is not None},
-        "image_scene": task.get("vision_parse", {}).get("scene_type"),
-        "information_gap": task.get("information_gap_plan"),
-        "instruction": (
-            "你是一个 benchmark 质检员。请判断以下地理任务样本是否合理：\n"
-            "1. 任务场景是否在现实中可能发生？\n"
-            "2. 图像场景和任务类型是否匹配？\n"
-            "3. 信息缺口计划是否合理（图像确实能提供某些信息）？\n"
-            "4. 约束条件是否有明显矛盾？\n\n"
-            "返回 JSON: {\"plausible\": true/false, \"reason\": \"简要说明\", \"review_priority\": 1-5}"
-        ),
-    }
-    messages = [
-        {"role": "system", "content": "你是严格的 benchmark 质检员。"},
-        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-    ]
-    result = llm.json_completion(messages, temperature=0.3)
-    return result
+def _determine_pass(scores: Dict[str, int]) -> tuple[bool, str]:
+    """Determine pass/fail and review priority from scores."""
+    values = list(scores.values())
+
+    if any(v <= 1 for v in values):
+        return False, "high"
+
+    if any(v <= 2 for v in values):
+        return True, "high"
+
+    if all(v >= 4 for v in values):
+        return True, "low"
+
+    return True, "medium"
 
 
-def check_task(task: Dict[str, Any], schema_loader: SchemaLoader,
-               coherence_engine: CoherenceEngine,
-               classification_engine: ClassificationEngine,
-               llm: BaseLLMClient) -> Dict[str, Any]:
-    """Run all three quality layers. Returns quality report."""
-    report: Dict[str, Any] = {
-        "image_id": task.get("image_id"),
-        "passed": True,
-        "rejection_reasons": [],
-        "review_priority": 1,
+def judge_task(task: Dict[str, Any],
+               llm) -> Dict[str, Any]:
+    """Run LLM judge on a single task. Returns task with judge_report attached."""
+    prompt = _build_judge_input(task)
+
+    judge_result = llm.json_completion(
+        [{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+
+    # Extract and validate scores
+    scores = judge_result.get("scores", {})
+    expected_keys = {"realism", "image_necessity", "behavior_chain",
+                     "verifiability", "coordinate_accuracy"}
+    for key in expected_keys:
+        if key not in scores:
+            scores[key] = 3  # default to neutral if missing
+
+    # Determine pass/fail
+    overall_pass, review_priority = _determine_pass(scores)
+
+    # Override with LLM's own judgment if it explicitly failed
+    if judge_result.get("overall_pass") is False:
+        overall_pass = False
+
+    # Apply coordinate corrections if provided
+    corrected = judge_result.get("corrected_coordinates", {})
+    if corrected and corrected != task.get("coordinates"):
+        task["coordinates_original"] = task["coordinates"]
+        task["coordinates"] = corrected
+
+    # Attach judge report
+    task["judge_report"] = {
+        "scores": scores,
+        "overall_pass": overall_pass,
+        "review_priority": judge_result.get("review_priority", review_priority),
+        "rejection_reason": judge_result.get("rejection_reason"),
+        "suggestions": judge_result.get("suggestions", ""),
+        "coordinates_corrected": corrected != task.get("coordinates_original", task["coordinates"]),
     }
 
-    # Layer 1: Programmatic coherence
-    task_type = task.get("task_type", "place_filter_rank")
-    global_context = task.get("global_context", {})
-    task_dimensions = task.get("task_dimensions", {})
+    return task
 
-    cls_ok, cls_violations = classification_engine.validate(task_type, task_dimensions)
-    if not cls_ok:
-        report["passed"] = False
-        report["rejection_reasons"].extend([v.message for v in cls_violations])
 
-    # Use a minimal scenario_frame for coherence check
-    scenario_frame = {"scenario_id": "generated", "default_context": {},
-                      "likely_overrides": {}, "unlikely_values": {},
-                      "compatible_task_types": [task_type]}
-    coherence = coherence_engine.validate(task_type, scenario_frame, global_context, task_dimensions)
-    if not coherence.is_valid:
-        report["passed"] = False
-        report["rejection_reasons"].extend([v.message for v in coherence.violations])
-
-    # Layer 2: Image necessity
-    img_check = _check_image_necessity(task)
-    if not img_check["passed"]:
-        report["passed"] = False
-        report["rejection_reasons"].extend(img_check["issues"])
-
-    # Layer 3: Image contribution alignment
-    contrib_check = _check_image_contribution(task)
-    if not contrib_check["passed"]:
-        report["passed"] = False
-        report["rejection_reasons"].extend(contrib_check["issues"])
-
-    # Layer 4: LLM plausibility (only if previous layers passed, to save API calls)
-    if report["passed"] and llm.available:
-        try:
-            llm_result = _llm_plausibility_check(task, llm)
-            if not llm_result.get("plausible", True):
-                report["passed"] = False
-                report["rejection_reasons"].append(llm_result.get("reason", "LLM 判定不合理"))
-            report["review_priority"] = llm_result.get("review_priority", 3)
-        except Exception as e:
-            # LLM failure doesn't block
-            report["review_priority"] = 3
-
-    return report
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def main(config: Optional[PipelineConfig] = None) -> Path:
     config = config or PipelineConfig()
-    llm = ClientFactory.for_stage(STAGE_QUALITY_LLM, config)
-    schema_loader = SchemaLoader(SCHEMA_PATH)
-    classification_engine = ClassificationEngine(schema_loader)
-    coherence_engine = CoherenceEngine(schema_loader, classification_engine)
-
-    DATA_OUT.mkdir(parents=True, exist_ok=True)
+    llm = ClientFactory.for_stage(STAGE_TASK_JUDGE, config)
 
     tasks = read_jsonl(TASKS_PATH)
     if not tasks:
         print("[Module 4] No tasks found. Run module 3 first.")
-        return QUALITY_PATH
+        return APPROVED_PATH
 
-    passed_tasks: List[Dict[str, Any]] = []
-    rejected_tasks: List[Dict[str, Any]] = []
+    DATA_OUT.mkdir(parents=True, exist_ok=True)
+
+    approved: List[Dict[str, Any]] = []
+    rejected: List[Dict[str, Any]] = []
+    score_sums: Dict[str, float] = {}
 
     for i, task in enumerate(tasks, 1):
-        image_id = task.get("image_id", "")
-        print(f"[Module 4] Checking task {i}/{len(tasks)}: {image_id}")
+        image_id = task.get("provenance", {}).get("image_id", "unknown")
+        coords = task.get("coordinates", {})
+        print(
+            f"[Module 4] Judging task {i}/{len(tasks)}: {image_id} "
+            f"({coords.get('task_type', '?')})"
+        )
 
         try:
-            report = check_task(task, schema_loader, coherence_engine,
-                                classification_engine, llm)
-            task["quality_report"] = report
+            judged = judge_task(task, llm)
+            report = judged["judge_report"]
+            scores = report["scores"]
 
-            if report["passed"]:
-                passed_tasks.append(task)
-                print(f"  -> PASSED (priority={report['review_priority']})")
+            # Accumulate scores for summary
+            for k, v in scores.items():
+                score_sums[k] = score_sums.get(k, 0) + v
+
+            if report["overall_pass"]:
+                approved.append(judged)
+                print(
+                    f"  -> PASS (priority={report['review_priority']}) "
+                    f"scores={scores}"
+                )
             else:
-                rejected_tasks.append(task)
-                print(f"  -> REJECTED: {report['rejection_reasons'][:2]}")
-        except Exception as e:
-            append_error(ERRORS_PATH, {"image_id": image_id, "error": str(e)})
-            print(f"  -> ERROR: {e}")
+                rejected.append(judged)
+                print(
+                    f"  -> REJECT: {report.get('rejection_reason', 'N/A')} "
+                    f"scores={scores}"
+                )
 
-    write_jsonl(QUALITY_PATH, passed_tasks)
-    write_jsonl(REJECTED_PATH, rejected_tasks)
-    print(f"[Module 4] Done. {len(passed_tasks)} passed, {len(rejected_tasks)} rejected")
-    return QUALITY_PATH
+        except Exception as e:
+            print(f"  -> ERROR: {e}")
+            append_error(ERRORS_PATH, {
+                "image_id": image_id, "error": str(e),
+            })
+
+    # Write results
+    approved_count = write_jsonl(APPROVED_PATH, approved)
+    rejected_count = write_jsonl(REJECTED_PATH, rejected)
+
+    # Summary
+    total = len(approved) + len(rejected)
+    print(f"\n[Module 4] Done. {approved_count} approved, {rejected_count} rejected.")
+    if total > 0:
+        print("[Module 4] Average scores:")
+        for k, v in score_sums.items():
+            print(f"  {k}: {v / total:.1f}")
+        pass_rate = len(approved) / total * 100
+        print(f"  Pass rate: {pass_rate:.0f}%")
+
+    return APPROVED_PATH
 
 
 if __name__ == "__main__":

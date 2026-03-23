@@ -1,0 +1,113 @@
+# GeoAgentBench Pipeline v4 — Task Specification
+# ─────────────────────────────────────────────────────────────────
+# 替代 schema.json (3713行) 的轻量控制文件。
+# 定义 3 个抽象控制坐标 + 目标分布 + 每种任务类型的创作引导。
+# ─────────────────────────────────────────────────────────────────
+
+version: "4.0"
+
+# ── 控制坐标定义 ─────────────────────────────────────────────────
+
+coordinates:
+  task_type:
+    values: [locate, search, route, plan, judge, adapt]
+    descriptions:
+      locate: "从图像线索定位一个地方（读招牌、识地标、跨图聚合）"
+      search: "按约束搜索筛选地点（找餐厅、药店、咖啡馆等）"
+      route: "规划路线或比较交通方式（驾车/地铁/步行对比）"
+      plan: "多点行程规划、时间预算编排（带时间窗的 TSP）"
+      judge: "判断地理信息的合理性、识别矛盾、拒绝不合理请求"
+      adapt: "环境变化后调整已有方案（多轮对话，增量修改）"
+    target_distribution:
+      locate: 0.167
+      search: 0.167
+      route: 0.167
+      plan: 0.167
+      judge: 0.167
+      adapt: 0.167
+
+  complexity:
+    values: [simple, moderate, complex]
+    descriptions:
+      simple: "1-2步，单一约束，直接查询即可完成"
+      moderate: "3-4步，多约束联合，需要中间推理"
+      complex: "5+步，约束冲突需权衡/多轮交互/全局优化"
+    target_distribution:
+      simple: 0.30
+      moderate: 0.40
+      complex: 0.30
+
+  image_role:
+    values: [primary, supporting, trigger]
+    descriptions:
+      primary: "图像提供解题关键信息（去掉图像任务无法完成）"
+      supporting: "图像提供辅助上下文（去掉图像任务变难但仍可做）"
+      trigger: "图像是任务的触发起因（用户看到某物所以提问）"
+    target_distribution:
+      primary: 0.50
+      supporting: 0.30
+      trigger: 0.20
+
+# ── 每种任务类型的创作引导 ────────────────────────────────────────
+
+task_guidance:
+  locate:
+    description: "用户拍了照片，需要 Agent 从中识别位置"
+    typical_api_calls: [reverse_geocode, place_details, nearby_search]
+    typical_write_actions: [save_to_favorites, add_to_contacts]
+    example_scenarios:
+      - "用户拍到路牌/招牌，想知道自己在哪"
+      - "用户拍到一个建筑，想查它的名字和地址"
+      - "用户拍了多张周围环境照片，迷路了要定位"
+    notes: "image_role 通常是 primary。Agent 需要从图像中提取地理线索。"
+
+  search:
+    description: "用户在某地需要找满足条件的地点"
+    typical_api_calls: [nearby_search, place_details]
+    typical_write_actions: [save_to_favorites]
+    example_scenarios:
+      - "找附近评分最高的、现在还开着的药店"
+      - "找一个安静、有插座、适合办公的咖啡馆"
+      - "想吃图里这种面，附近哪家店有"
+    notes: "约束可以来自图像（看到某食物想找类似店）或纯文本描述。"
+
+  route:
+    description: "用户需要从 A 到 B 的路线或比较交通方式"
+    typical_api_calls: [directions, distance_matrix, place_details]
+    typical_write_actions: [add_calendar_reminder, save_route]
+    example_scenarios:
+      - "从照片位置到机场，赶 15:00 的飞机来得及吗"
+      - "比较驾车、地铁、打车三种方式去面试"
+      - "带大行李箱，哪种交通方式最方便"
+    notes: "时间约束（赶飞机、赶会议）增加难度。图像可提供出发地或约束信息。"
+
+  plan:
+    description: "用户需要安排多点访问的行程"
+    typical_api_calls: [nearby_search, place_details, directions]
+    typical_write_actions: [create_calendar_events]
+    example_scenarios:
+      - "明天想顺路把采购、吃饭、散步都做了"
+      - "从照片里的几个景点中排出最优游览顺序"
+      - "半天时间安排博物馆+午饭+咖啡馆"
+    notes: "需要考虑营业时间、通勤时间、时间预算。最复杂的任务类型。"
+
+  judge:
+    description: "用户给出的地理信息有矛盾或错误，Agent 需识别并拒绝盲从"
+    typical_api_calls: [place_details, geocoding]
+    typical_write_actions: []
+    example_scenarios:
+      - "用户说去北京看东方明珠（东方明珠在上海）"
+      - "用户安排的一日游时间上不可行"
+      - "2月份去青海湖骑行（冬季不可行）"
+    notes: "Agent 需要拒绝执行不合理请求，给出原因并建议替代方案。"
+
+  adapt:
+    description: "用户已有方案，环境变化后需要调整"
+    typical_api_calls: [nearby_search, directions, place_details]
+    typical_write_actions: [update_calendar, update_route]
+    example_scenarios:
+      - "原路线堵车了，换条路"
+      - "目标餐厅关门了，找替代"
+      - "突然下雨，户外改室内"
+    notes: "必须多轮对话。第一轮建方案，后续轮引入变化。Agent 需增量修改而非从头来过。"
+    multi_turn: true

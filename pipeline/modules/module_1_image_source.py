@@ -67,6 +67,9 @@ def process_seed(seed: Dict[str, Any], maps: GoogleMapsClient,
                 lat=seed["lat"], lng=seed["lng"],
                 heading=heading, pitch=0, fov=90,
             )
+            # Skip Google's "no imagery" placeholder (typically very small ~8-12KB gray image)
+            if len(img_bytes) < 15000:
+                continue
             image_path.write_bytes(img_bytes)
         except Exception as e:
             append_error(ERRORS_PATH, {"seed": seed, "poi_id": poi.get("id"), "stage": "street_view_download", "error": str(e)})
@@ -114,8 +117,8 @@ def main(config: Optional[PipelineConfig] = None, seed_limit: Optional[int] = No
     with open(seeds_path, encoding="utf-8") as f:
         seeds: List[Dict[str, Any]] = json.load(f)
 
-    if seed_limit is not None:
-        seeds = seeds[:seed_limit]
+    if seed_limit is not None and seed_limit < len(seeds):
+        seeds = random.sample(seeds, seed_limit)
 
     all_records: List[Dict[str, Any]] = []
     for i, seed in enumerate(seeds, 1):

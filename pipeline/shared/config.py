@@ -39,7 +39,11 @@ _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 
 # Default stage → endpoint fallback when stage_models is absent from config
 _DEFAULT_STAGE_MODELS = {
-    "vision_parse":   "qwen_vl",
+    # v4 stages
+    "vision_parse":   "claude_sonnet",
+    "task_create":    "claude_sonnet",
+    "task_judge":     "claude_sonnet",
+    # v3 legacy stages (kept for backward compatibility)
     "task_design":    "qwen_default",
     "quality_llm":    "qwen_default",
     "query_rewrite":  "qwen_strong",
